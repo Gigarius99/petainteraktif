@@ -34,9 +34,11 @@ export default function Dashboard() {
     if (layerId) fetchLayer(layerId);
   }, []);
 
+  const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
+
   const fetchLayer = async (layerId: string) => {
     try {
-      const res = await fetch(`http://localhost:3000/geojson/layer/${layerId}`);
+      const res = await fetch(`${API_URL}/geojson/layer/${layerId}`);
       if (res.ok) {
         const json = await res.json();
         setGeoData(json);
@@ -61,7 +63,7 @@ export default function Dashboard() {
     formData.append('file', file);
 
     try {
-      const res = await fetch('http://localhost:3000/geojson/upload', {
+      const res = await fetch(`${API_URL}/geojson/upload`, {
         method: 'POST',
         headers: { 'Authorization': `Bearer ${token}` },
         body: formData,
