@@ -149,7 +149,7 @@ export default function Dashboard() {
     // Buat koleksi semua feature dalam kecamatan ini
     const features = desaByKec[kecName] || [];
     if (features.length === 0) return;
-    const fc = { type: 'FeatureCollection', features };
+    const fc = turf.featureCollection(features as any[]);
     try {
       const bbox = turf.bbox(fc);
       setFlyToFeature({ type: 'bbox', bbox });
