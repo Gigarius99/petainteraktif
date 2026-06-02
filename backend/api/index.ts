@@ -11,7 +11,7 @@ export default async function handler(req: any, res: any) {
         logger: ['error', 'warn'],
       });
       app.enableCors({
-        origin: '*',
+        origin: true,
         methods: 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS',
         credentials: true,
       });
