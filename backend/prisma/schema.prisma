@@ -1,0 +1,115 @@
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["postgresqlExtensions"]
+}
+
+datasource db {
+  provider   = "postgresql"
+  extensions = [postgis]
+}
+
+model Users {
+  id         String   @id @default(cuid())
+  name       String
+  email      String   @unique
+  password   String
+  avatar     String?
+  role       String   @default("VIEWER") // SUPER_ADMIN, ADMIN, EDITOR, VIEWER
+  created_at DateTime @default(now())
+
+  maps          Maps[]
+  geoJsonFiles  GeoJSONFiles[]
+  mapComments   MapComments[]
+  activityLogs  ActivityLogs[]
+}
+
+model Maps {
+  id          String   @id @default(cuid())
+  user_id     String
+  title       String
+  description String?
+  thumbnail   String?
+  created_at  DateTime @default(now())
+
+  user        Users    @relation(fields: [user_id], references: [id])
+  layers      Layers[]
+  comments    MapComments[]
+}
+
+model Layers {
+  id           String   @id @default(cuid())
+  map_id       String
+  name         String
+  type         String
+  visibility   Boolean  @default(true)
+  style_config Json?
+  created_at   DateTime @default(now())
+
+  map          Maps     @relation(fields: [map_id], references: [id])
+  geoFeatures  GeoFeatures[]
+}
+
+model GeoFeatures {
+  id         String   @id @default(cuid())
+  layer_id   String
+  geometry   Unsupported("geometry")
+  properties Json?
+  created_at DateTime @default(now())
+
+  layer      Layers   @relation(fields: [layer_id], references: [id])
+}
+
+model GeoJSONFiles {
+  id             String   @id @default(cuid())
+  user_id        String
+  filename       String
+  original_name  String
+  geometry_type  String?
+  total_features Int      @default(0)
+  file_size      Int
+  upload_date    DateTime @default(now())
+  bounding_box   Json?
+  created_at     DateTime @default(now())
+
+  user           Users    @relation(fields: [user_id], references: [id])
+  layers         GeoJSONLayers[]
+}
+
+model GeoJSONLayers {
+  id              String   @id @default(cuid())
+  geojson_file_id String
+  name            String
+  style_config    Json?
+  visibility      Boolean  @default(true)
+  created_at      DateTime @default(now())
+
+  geoJsonFile     GeoJSONFiles @relation(fields: [geojson_file_id], references: [id])
+}
+
+model MapComments {
+  id         String   @id @default(cuid())
+  map_id     String
+  user_id    String
+  comment    String
+  created_at DateTime @default(now())
+
+  map        Maps     @relation(fields: [map_id], references: [id])
+  user       Users    @relation(fields: [user_id], references: [id])
+}
+
+model ActivityLogs {
+  id         String   @id @default(cuid())
+  user_id    String
+  action     String
+  created_at DateTime @default(now())
+
+  user       Users    @relation(fields: [user_id], references: [id])
+}
+
+model Analytics {
+  id             String @id @default(cuid())
+  total_maps     Int    @default(0)
+  total_layers   Int    @default(0)
+  total_features Int    @default(0)
+  active_users   Int    @default(0)
+}
