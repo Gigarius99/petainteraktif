@@ -1,10 +1,10 @@
 'use client';
-import { useState, useRef, useEffect, useMemo } from 'react';
+import { useState, useRef, useEffect, useMemo, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import MapViewer from '@/components/MapViewer';
 import {
   Layers, Database, Activity, Share2, UploadCloud,
-  LogOut, ChevronDown, ChevronRight, MapPin, Map
+  LogOut, ChevronDown, ChevronRight, MapPin, Map, Download, PenLine, AlertTriangle
 } from 'lucide-react';
 import * as turf from '@turf/turf';
 
@@ -32,6 +32,14 @@ export default function Dashboard() {
   
   const [selectedPemilu, setSelectedPemilu] = useState<'pemilu_2024' | 'pemilu_2019' | null>(null);
   const [selectedElection, setSelectedElection] = useState<'PPWP' | 'DPD' | 'DPR RI' | 'DPRD PROVINSI' | 'DPRD KABUPATEN' | null>(null);
+
+  // ─── Draw Mode States ───────────────────────────────────────────────────
+  const [drawMode, setDrawMode] = useState(false);
+  const [drawingPoints, setDrawingPoints] = useState<[number, number][]>([]);
+  const [drawingForDesa, setDrawingForDesa] = useState<string | null>(null);
+  const [drawingForKec, setDrawingForKec] = useState<string | null>(null);
+  const [missingGeoOpen, setMissingGeoOpen] = useState(false);
+  const [hasUnsavedDraw, setHasUnsavedDraw] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const router = useRouter();
@@ -235,16 +243,104 @@ export default function Dashboard() {
     try {
       const desaName = getProp(feature.properties, 'desa');
       if (desaName) setHighlightedDesa(desaName);
-      
-      const center = turf.center(feature);
-      setFlyToFeature({
-        type: 'center',
-        longitude: center.geometry.coordinates[0],
-        latitude: center.geometry.coordinates[1],
-        zoom: 13,
-      });
+      if (feature.geometry) {
+        const center = turf.center(feature);
+        setFlyToFeature({
+          type: 'center',
+          longitude: center.geometry.coordinates[0],
+          latitude: center.geometry.coordinates[1],
+          zoom: 13,
+        });
+      }
     } catch {}
   };
+
+  // ─── Detect features without geometry ───────────────────────────────────
+  const missingGeoFeatures = useMemo(() => {
+    if (!geoData?.features) return [];
+    return geoData.features.filter((f: any) => !f.geometry || !f.geometry.coordinates);
+  }, [geoData]);
+
+  // ─── Draw Mode Handlers ──────────────────────────────────────────────────
+  const startDrawForDesa = useCallback((feature: any) => {
+    const desaName = getProp(feature.properties, 'desa');
+    const kecName = getProp(feature.properties, 'kecamatan');
+    setDrawingForDesa(desaName);
+    setDrawingForKec(kecName);
+    setDrawingPoints([]);
+    setDrawMode(true);
+  }, []);
+
+  const handleMapClick = useCallback((lng: number, lat: number) => {
+    setDrawingPoints(prev => [...prev, [lng, lat]]);
+  }, []);
+
+  const handleUndoPoint = useCallback(() => {
+    setDrawingPoints(prev => prev.slice(0, -1));
+  }, []);
+
+  const handleCancelDraw = useCallback(() => {
+    setDrawMode(false);
+    setDrawingPoints([]);
+    setDrawingForDesa(null);
+    setDrawingForKec(null);
+  }, []);
+
+  const handleFinishDraw = useCallback(() => {
+    if (drawingPoints.length < 3 || !drawingForDesa || !drawingForKec) return;
+
+    // Close the polygon (first point = last point)
+    const closedRing = [...drawingPoints, drawingPoints[0]];
+    const newGeometry = {
+      type: 'Polygon',
+      coordinates: [closedRing],
+    };
+
+    // Update geoData: find the matching feature and set its geometry
+    setGeoData((prev: any) => {
+      if (!prev?.features) return prev;
+      const updated = prev.features.map((f: any) => {
+        const fDesa = getProp(f.properties, 'desa');
+        const fKec = getProp(f.properties, 'kecamatan');
+        if (fDesa === drawingForDesa && fKec === drawingForKec && !f.geometry) {
+          return { ...f, geometry: newGeometry };
+        }
+        return f;
+      });
+      return { ...prev, features: updated };
+    });
+
+    // Fly to the new polygon
+    try {
+      const fc = turf.featureCollection([{
+        type: 'Feature' as const,
+        properties: {},
+        geometry: newGeometry as any,
+      }]);
+      const bbox = turf.bbox(fc);
+      setFlyToFeature({ type: 'bbox', bbox });
+    } catch {}
+
+    setHasUnsavedDraw(true);
+    setDrawMode(false);
+    setDrawingPoints([]);
+    setDrawingForDesa(null);
+    setDrawingForKec(null);
+  }, [drawingPoints, drawingForDesa, drawingForKec]);
+
+  // ─── Export updated GeoJSON ──────────────────────────────────────────────
+  const handleDownloadGeoJSON = useCallback(() => {
+    if (!geoData) return;
+    const json = JSON.stringify(geoData, null, 2);
+    const blob = new Blob([json], { type: 'application/geo+json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'updated_geojson.geojson';
+    a.click();
+    URL.revokeObjectURL(url);
+    setHasUnsavedDraw(false);
+  }, [geoData]);
 
   return (
     <div className="flex h-screen w-full bg-slate-950 overflow-hidden text-slate-100">
@@ -373,6 +469,46 @@ export default function Dashboard() {
             </div>
           )}
 
+          {/* ── Missing Geometry Section ── */}
+          {geoData && missingGeoFeatures.length > 0 && (
+            <>
+              <button
+                onClick={() => setMissingGeoOpen(!missingGeoOpen)}
+                className="w-full flex items-center gap-3 p-3 px-4 rounded-lg transition-all duration-200 group bg-amber-500/10 text-amber-400 border border-amber-500/20"
+              >
+                <AlertTriangle size={18} className="shrink-0" />
+                <span className="font-medium text-sm flex-1 text-left">Desa Tanpa Peta</span>
+                <span className="text-xs bg-amber-500/20 px-1.5 py-0.5 rounded-full">{missingGeoFeatures.length}</span>
+                {missingGeoOpen ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+              </button>
+
+              {missingGeoOpen && (
+                <div className="ml-3 border-l border-amber-500/20 pl-2 space-y-1">
+                  <p className="text-xs text-slate-500 italic px-2 py-1">Klik ✏️ untuk menggambar batas desa di peta</p>
+                  {missingGeoFeatures.map((f: any, i: number) => {
+                    const desaName = getProp(f.properties, 'desa') || `Desa ${i + 1}`;
+                    const kecName = getProp(f.properties, 'kecamatan') || '';
+                    return (
+                      <div key={i} className="flex items-center gap-1 pr-1">
+                        <span className="flex-1 text-xs text-amber-300 px-2 py-1 truncate">
+                          {desaName}
+                          <span className="text-slate-500 ml-1 text-xs">{kecName}</span>
+                        </span>
+                        <button
+                          onClick={() => startDrawForDesa(f)}
+                          title={`Gambar batas ${desaName}`}
+                          className="shrink-0 p-1.5 rounded bg-amber-500/20 text-amber-300 hover:bg-amber-500/40 hover:text-amber-100 transition-all"
+                        >
+                          <PenLine size={13} />
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </>
+          )}
+
           {/* ── Menu lain ── */}
           <SidebarItem icon={<UploadCloud size={20} />} label="Import Data" onClick={() => fileInputRef.current?.click()} />
           
@@ -449,7 +585,16 @@ export default function Dashboard() {
           <SidebarItem icon={<Share2 size={20} />} label="Collaboration" />
         </nav>
 
-        <div className="w-full px-3 pb-4">
+        <div className="w-full px-3 pb-4 space-y-1">
+          {hasUnsavedDraw && (
+            <button
+              onClick={handleDownloadGeoJSON}
+              className="w-full flex items-center gap-2 p-2.5 px-4 rounded-lg bg-green-600/20 text-green-300 border border-green-500/30 hover:bg-green-600/30 transition-all text-sm font-medium animate-pulse"
+            >
+              <Download size={16} className="shrink-0" />
+              <span className="text-xs">Download GeoJSON Terbaru</span>
+            </button>
+          )}
           <SidebarItem icon={<LogOut size={20} />} label="Logout" onClick={handleLogout} />
         </div>
       </aside>
@@ -457,7 +602,19 @@ export default function Dashboard() {
       {/* ── Main Map ── */}
       <main className="flex-1 flex flex-col h-full overflow-hidden p-2 lg:p-4 relative">
         <div className="flex-1 rounded-xl overflow-hidden shadow-2xl relative border border-slate-800/60 ring-1 ring-white/5">
-          <MapViewer geoData={geoData} flyToFeature={flyToFeature} highlightedKec={highlightedKec} highlightedDesa={highlightedDesa} />
+          <MapViewer
+            geoData={geoData}
+            flyToFeature={flyToFeature}
+            highlightedKec={highlightedKec}
+            highlightedDesa={highlightedDesa}
+            drawMode={drawMode}
+            drawingPoints={drawingPoints}
+            onMapClick={handleMapClick}
+            onFinishDraw={handleFinishDraw}
+            onCancelDraw={handleCancelDraw}
+            onUndoPoint={handleUndoPoint}
+            drawingForLabel={drawingForDesa ? `Desa ${drawingForDesa}, Kec. ${drawingForKec}` : undefined}
+          />
           
           {/* ── Floating Spatial Analysis Panel ── */}
           {aggregatedData && (

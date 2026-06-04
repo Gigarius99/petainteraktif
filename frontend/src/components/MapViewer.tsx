@@ -5,7 +5,7 @@ import Map, { NavigationControl, FullscreenControl, ScaleControl, GeolocateContr
 import maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import DeckGL from '@deck.gl/react';
-import { GeoJsonLayer } from '@deck.gl/layers';
+import { GeoJsonLayer, ScatterplotLayer, PathLayer } from '@deck.gl/layers';
 import * as turf from '@turf/turf';
 
 // Helper: get property case-insensitive
@@ -17,12 +17,32 @@ function getProp(props: any, key: string): string | null {
 
 interface MapViewerProps {
   geoData?: any;
-  flyToFeature?: any;     // { type: 'bbox', bbox: [...] } | { type: 'center', longitude, latitude, zoom }
+  flyToFeature?: any;
   highlightedKec?: string | null;
   highlightedDesa?: string | null;
+  // Draw mode props
+  drawMode?: boolean;
+  drawingPoints?: [number, number][];
+  onMapClick?: (lng: number, lat: number) => void;
+  onFinishDraw?: () => void;
+  onCancelDraw?: () => void;
+  onUndoPoint?: () => void;
+  drawingForLabel?: string;
 }
 
-export default function MapViewer({ geoData, flyToFeature, highlightedKec, highlightedDesa }: MapViewerProps) {
+export default function MapViewer({
+  geoData,
+  flyToFeature,
+  highlightedKec,
+  highlightedDesa,
+  drawMode = false,
+  drawingPoints = [],
+  onMapClick,
+  onFinishDraw,
+  onCancelDraw,
+  onUndoPoint,
+  drawingForLabel,
+}: MapViewerProps) {
   const [viewState, setViewState] = useState({
     longitude: 118.0149,
     latitude: -2.5489,
@@ -47,7 +67,11 @@ export default function MapViewer({ geoData, flyToFeature, highlightedKec, highl
   useEffect(() => {
     if (geoData?.features?.length > 0) {
       try {
-        const center = turf.center(geoData);
+        // Only center on features with geometry
+        const validFeatures = geoData.features.filter((f: any) => f.geometry);
+        if (validFeatures.length === 0) return;
+        const fc = { ...geoData, features: validFeatures };
+        const center = turf.center(fc);
         if (center.geometry?.coordinates) {
           setViewState(prev => ({
             ...prev,
@@ -72,7 +96,6 @@ export default function MapViewer({ geoData, flyToFeature, highlightedKec, highl
         const [minLng, minLat, maxLng, maxLat] = flyToFeature.bbox;
         const centerLng = (minLng + maxLng) / 2;
         const centerLat = (minLat + maxLat) / 2;
-        // Estimate zoom from bbox span
         const lngSpan = maxLng - minLng;
         const latSpan = maxLat - minLat;
         const span = Math.max(lngSpan, latSpan);
@@ -96,29 +119,86 @@ export default function MapViewer({ geoData, flyToFeature, highlightedKec, highl
     }
   }, [flyToFeature]);
 
-  // Layer: normal features
+  // ─── Draw Mode Layers ──────────────────────────────────────────────────────
+  const drawVerticesLayer = drawMode && drawingPoints.length > 0
+    ? new ScatterplotLayer({
+        id: 'draw-vertices',
+        data: drawingPoints.map((p, i) => ({ position: p, index: i })),
+        getPosition: (d: any) => d.position,
+        getRadius: 6,
+        getFillColor: (d: any) => d.index === 0 ? [255, 200, 0, 255] : [255, 80, 80, 255],
+        getLineColor: [255, 255, 255, 255],
+        stroked: true,
+        lineWidthMinPixels: 2,
+        radiusUnits: 'pixels',
+        pickable: false,
+      })
+    : null;
+
+  // Line connecting all drawn points + back to first (closing preview)
+  const drawPathPoints = drawingPoints.length >= 2
+    ? [...drawingPoints, drawingPoints[0]]
+    : drawingPoints;
+
+  const drawPathLayer = drawMode && drawingPoints.length >= 2
+    ? new PathLayer({
+        id: 'draw-path',
+        data: [{ path: drawPathPoints }],
+        getPath: (d: any) => d.path,
+        getColor: [255, 220, 50, 200],
+        getWidth: 2,
+        widthUnits: 'pixels',
+        pickable: false,
+      })
+    : null;
+
+  // Filled polygon preview when >= 3 points
+  const drawPolygonLayer = drawMode && drawingPoints.length >= 3
+    ? new GeoJsonLayer({
+        id: 'draw-polygon-preview',
+        data: {
+          type: 'FeatureCollection',
+          features: [{
+            type: 'Feature',
+            properties: {},
+            geometry: {
+              type: 'Polygon',
+              coordinates: [[...drawingPoints, drawingPoints[0]]],
+            },
+          }],
+        },
+        filled: true,
+        stroked: false,
+        getFillColor: [255, 200, 50, 60],
+        pickable: false,
+      })
+    : null;
+
+  // ─── Normal GeoJSON Layer ──────────────────────────────────────────────────
   const normalLayer = new GeoJsonLayer({
     id: 'geojson-layer',
     data: dataToRender,
-    pickable: true,
+    pickable: !drawMode,
     stroked: true,
     filled: true,
     extruded: false,
     lineWidthUnits: 'pixels',
     lineWidthMinPixels: 1,
     getFillColor: (f: any) => {
+      if (!f.geometry) return [0, 0, 0, 0]; // hide features without geometry
       if (highlightedDesa && getProp(f.properties, 'desa') === highlightedDesa && getProp(f.properties, 'kecamatan') === highlightedKec) {
-        return [50, 255, 150, 200]; // green highlight for desa
+        return [50, 255, 150, 200];
       }
       if (highlightedKec === 'ALL') {
-        return [100, 200, 255, 160]; // highlight everything
+        return [100, 200, 255, 160];
       }
       if (highlightedKec && getProp(f.properties, 'kecamatan') === highlightedKec) {
-        return [100, 200, 255, 160]; // cyan highlight for kecamatan
+        return [100, 200, 255, 160];
       }
       return [160, 160, 180, 130];
     },
     getLineColor: (f: any) => {
+      if (!f.geometry) return [0, 0, 0, 0];
       if (highlightedDesa && getProp(f.properties, 'desa') === highlightedDesa && getProp(f.properties, 'kecamatan') === highlightedKec) {
         return [100, 255, 150, 255];
       }
@@ -131,15 +211,12 @@ export default function MapViewer({ geoData, flyToFeature, highlightedKec, highl
       return [255, 255, 255, 200];
     },
     getLineWidth: (f: any) => {
+      if (!f.geometry) return 0;
       if (highlightedDesa && getProp(f.properties, 'desa') === highlightedDesa && getProp(f.properties, 'kecamatan') === highlightedKec) {
         return 3;
       }
-      if (highlightedKec === 'ALL') {
-        return 2.5;
-      }
-      if (highlightedKec && getProp(f.properties, 'kecamatan') === highlightedKec) {
-        return 2.5;
-      }
+      if (highlightedKec === 'ALL') return 2.5;
+      if (highlightedKec && getProp(f.properties, 'kecamatan') === highlightedKec) return 2.5;
       return 1.5;
     },
     updateTriggers: {
@@ -147,12 +224,12 @@ export default function MapViewer({ geoData, flyToFeature, highlightedKec, highl
       getLineColor: [highlightedKec, highlightedDesa],
       getLineWidth: [highlightedKec, highlightedDesa],
     },
-    autoHighlight: true,
+    autoHighlight: !drawMode,
     highlightColor: [255, 255, 0, 255],
   });
 
   const handleTooltip = ({ object }: any) => {
-    if (!object) return null;
+    if (drawMode || !object) return null;
     const props = object.properties;
     if (!props) return null;
 
@@ -186,14 +263,31 @@ export default function MapViewer({ geoData, flyToFeature, highlightedKec, highl
     };
   };
 
+  const layers = [
+    normalLayer,
+    drawPolygonLayer,
+    drawPathLayer,
+    drawVerticesLayer,
+  ].filter(Boolean);
+
+  const handleDeckClick = (info: any, event: any) => {
+    if (!drawMode || !onMapClick) return;
+    const { coordinate } = info;
+    if (coordinate) {
+      onMapClick(coordinate[0], coordinate[1]);
+    }
+  };
+
   return (
     <div className="relative w-full h-full bg-slate-900 rounded-lg overflow-hidden border border-slate-800 shadow-xl">
       <DeckGL
         viewState={viewState}
-        controller={true}
-        layers={[normalLayer]}
+        controller={drawMode ? { doubleClickZoom: false } : true}
+        layers={layers as any}
         onViewStateChange={({ viewState: vs }: any) => setViewState(vs)}
         getTooltip={handleTooltip}
+        onClick={handleDeckClick}
+        style={{ cursor: drawMode ? 'crosshair' : 'default' }}
       >
         <Map
           mapLib={maplibregl as any}
@@ -210,7 +304,7 @@ export default function MapViewer({ geoData, flyToFeature, highlightedKec, highl
       <div className="absolute top-4 left-4 bg-slate-900/80 backdrop-blur-md p-4 rounded-lg border border-slate-700 text-white shadow-lg pointer-events-none">
         <h2 className="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-blue-400 to-cyan-400">GEO SmartMap</h2>
         <p className="text-sm text-slate-400 mt-1">Interactive GeoJSON Platform</p>
-        {(highlightedKec || highlightedDesa) && (
+        {(highlightedKec || highlightedDesa) && !drawMode && (
           <div className="mt-2 border-t border-slate-700 pt-2 flex flex-col gap-1">
             {highlightedKec === 'ALL' ? (
               <p className="text-xs text-blue-400">📍 Seluruh Kabupaten</p>
@@ -223,6 +317,52 @@ export default function MapViewer({ geoData, flyToFeature, highlightedKec, highl
           </div>
         )}
       </div>
+
+      {/* ─── Draw Mode Overlay ─────────────────────────────────────────────── */}
+      {drawMode && (
+        <>
+          {/* Top banner */}
+          <div className="absolute top-0 left-0 right-0 bg-amber-500/90 backdrop-blur-sm text-slate-900 px-4 py-2.5 flex items-center justify-between z-20 shadow-lg">
+            <div className="flex items-center gap-2">
+              <span className="text-lg">✏️</span>
+              <div>
+                <p className="font-bold text-sm">Mode Menggambar Aktif</p>
+                <p className="text-xs opacity-80">
+                  {drawingForLabel && <span className="font-semibold">{drawingForLabel}</span>}
+                  {' — '}Klik pada peta untuk menambah titik. {drawingPoints.length} titik ditambahkan.
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={onUndoPoint}
+                disabled={drawingPoints.length === 0}
+                className="px-3 py-1 bg-slate-800/80 text-white text-xs rounded-lg hover:bg-slate-700 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
+              >
+                ↩ Undo
+              </button>
+              <button
+                onClick={onFinishDraw}
+                disabled={drawingPoints.length < 3}
+                className="px-3 py-1 bg-green-600 text-white text-xs font-bold rounded-lg hover:bg-green-500 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
+              >
+                ✓ Selesai ({drawingPoints.length >= 3 ? 'Simpan Polygon' : `Min. 3 titik`})
+              </button>
+              <button
+                onClick={onCancelDraw}
+                className="px-3 py-1 bg-red-600 text-white text-xs rounded-lg hover:bg-red-500 transition-all"
+              >
+                ✕ Batal
+              </button>
+            </div>
+          </div>
+
+          {/* Crosshair hint */}
+          <div className="absolute bottom-16 left-1/2 -translate-x-1/2 bg-slate-900/80 text-slate-300 text-xs px-4 py-2 rounded-full backdrop-blur-sm pointer-events-none z-20">
+            🖱️ Klik untuk tambah titik sudut polygon desa
+          </div>
+        </>
+      )}
     </div>
   );
 }
