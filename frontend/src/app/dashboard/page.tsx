@@ -25,6 +25,14 @@ export default function Dashboard() {
   const [desaOpen, setDesaOpen] = useState(false);
   const [selectedKec, setSelectedKec] = useState<string | null>(null);
 
+  // New states for Spatial Analysis
+  const [analysisOpen, setAnalysisOpen] = useState(false);
+  const [pemilu2024Open, setPemilu2024Open] = useState(false);
+  const [pemilu2019Open, setPemilu2019Open] = useState(false);
+  
+  const [selectedPemilu, setSelectedPemilu] = useState<'pemilu_2024' | 'pemilu_2019' | null>(null);
+  const [selectedElection, setSelectedElection] = useState<'PPWP' | 'DPD' | 'DPR RI' | 'DPRD PROVINSI' | 'DPRD KABUPATEN' | null>(null);
+
   const fileInputRef = useRef<HTMLInputElement>(null);
   const router = useRouter();
 
@@ -146,8 +154,14 @@ export default function Dashboard() {
     setSelectedKec(kecName);
     setHighlightedKec(kecName);
     setHighlightedDesa(null);
-    // Buat koleksi semua feature dalam kecamatan ini
-    const features = desaByKec[kecName] || [];
+    // Buat koleksi semua feature dalam kecamatan ini (atau semua jika ALL)
+    let features: any[] = [];
+    if (kecName === 'ALL') {
+      features = geoData?.features || [];
+    } else {
+      features = desaByKec[kecName] || [];
+    }
+    
     if (features.length === 0) return;
     const fc = turf.featureCollection(features as any[]);
     try {
@@ -155,6 +169,66 @@ export default function Dashboard() {
       setFlyToFeature({ type: 'bbox', bbox });
     } catch {}
   };
+
+  // ─── Aggregation Logic for Spatial Analysis ─────────────────────────────
+  const aggregatedData = useMemo(() => {
+    if (!selectedPemilu || !selectedElection || !geoData?.features) return null;
+
+    let targetFeatures: any[] = [];
+    if (highlightedDesa && selectedKec && selectedKec !== 'ALL') {
+      targetFeatures = geoData.features.filter((f: any) => 
+        getProp(f.properties, 'desa') === highlightedDesa && 
+        getProp(f.properties, 'kecamatan') === selectedKec
+      );
+    } else if (selectedKec && selectedKec !== 'ALL') {
+      targetFeatures = desaByKec[selectedKec] || [];
+    } else if (selectedKec === 'ALL') {
+      targetFeatures = geoData.features;
+    } else {
+      return null;
+    }
+
+    if (targetFeatures.length === 0) return null;
+
+    const result = {
+      total_tps: 0,
+      total_suara_sah: 0,
+      calon: {} as Record<string, number>
+    };
+
+    targetFeatures.forEach(f => {
+      const props = f.properties;
+      if (!props) return;
+      
+      const tps = parseInt(getProp(props, 'jumlah_tps') || '0', 10);
+      if (!isNaN(tps)) result.total_tps += tps;
+
+      const pemiluData = props[selectedPemilu] || props[selectedPemilu.toUpperCase()];
+      if (pemiluData) {
+        const electionData = pemiluData[selectedElection] || pemiluData[selectedElection.toUpperCase()];
+        if (electionData) {
+          result.total_suara_sah += (electionData.total_suara_sah || 0);
+          
+          if (electionData.calon) {
+            Object.entries(electionData.calon).forEach(([nama, suara]) => {
+              const val = Number(suara) || 0;
+              if (!result.calon[nama]) result.calon[nama] = 0;
+              result.calon[nama] += val;
+            });
+          }
+        }
+      }
+    });
+
+    const sortedCalon = Object.entries(result.calon).sort((a, b) => b[1] - a[1]);
+
+    let regionName = 'Pilih Wilayah';
+    if (highlightedDesa) regionName = `Desa ${highlightedDesa}, Kec. ${selectedKec}`;
+    else if (selectedKec === 'ALL') regionName = 'Kabupaten Wonogiri (Seluruh Desa)';
+    else if (selectedKec) regionName = `Kecamatan ${selectedKec}`;
+
+    return { ...result, sortedCalon, regionName };
+  }, [geoData, selectedKec, highlightedDesa, selectedPemilu, selectedElection, desaByKec]);
 
   // ─── Handler klik Desa: fly ke desa spesifik ────────────────────────────
   const handleDesaClick = (feature: any) => {
@@ -215,6 +289,17 @@ export default function Dashboard() {
 
               {kecOpen && (
                 <div className="ml-2 space-y-0.5 max-h-48 overflow-y-auto pr-1">
+                  <button
+                    onClick={() => handleKecClick('ALL')}
+                    className={`w-full text-left px-3 py-1.5 rounded text-xs transition-all ${
+                      selectedKec === 'ALL'
+                        ? 'bg-blue-600/20 text-blue-300 border border-blue-500/30 font-bold'
+                        : 'text-slate-300 hover:bg-slate-800 hover:text-slate-200 font-bold'
+                    }`}
+                  >
+                    🌟 Kab. Wonogiri (Semua)
+                  </button>
+                  <div className="h-px bg-slate-700/50 my-1 mx-2" />
                   {kecamatanList.map(kec => (
                     <button
                       key={kec}
@@ -238,7 +323,9 @@ export default function Dashboard() {
               >
                 <MapPin size={15} className="text-green-400 shrink-0" />
                 <span className="flex-1 text-left font-medium">Desa</span>
-                {selectedKec
+                {selectedKec === 'ALL'
+                  ? <span className="text-xs text-slate-500 mr-1 italic">Semua Desa</span>
+                  : selectedKec
                   ? <span className="text-xs text-slate-500 mr-1">{desaList.length} di {selectedKec}</span>
                   : <span className="text-xs text-slate-500 mr-1 italic">Pilih Kecamatan dulu</span>
                 }
@@ -247,7 +334,11 @@ export default function Dashboard() {
 
               {desaOpen && (
                 <div className="ml-2 space-y-0.5">
-                  {desaList.length === 0 ? (
+                  {selectedKec === 'ALL' ? (
+                    <p className="text-xs text-slate-500 italic px-3 py-2">
+                      Semua desa di Kabupaten dipilih.
+                    </p>
+                  ) : desaList.length === 0 ? (
                     <p className="text-xs text-slate-500 italic px-3 py-2">
                       {selectedKec ? 'Tidak ada desa ditemukan.' : 'Klik salah satu Kecamatan terlebih dahulu.'}
                     </p>
@@ -284,7 +375,76 @@ export default function Dashboard() {
 
           {/* ── Menu lain ── */}
           <SidebarItem icon={<UploadCloud size={20} />} label="Import Data" onClick={() => fileInputRef.current?.click()} />
-          <SidebarItem icon={<Activity size={20} />} label="Spatial Analysis" />
+          
+          {/* ── Spatial Analysis (collapsible) ── */}
+          <button
+            onClick={() => setAnalysisOpen(!analysisOpen)}
+            className={`w-full flex items-center gap-3 p-3 px-4 rounded-lg transition-all duration-200 group ${
+              analysisOpen
+                ? 'bg-blue-600/10 text-blue-400 border border-blue-500/20 shadow-inner'
+                : 'text-slate-400 hover:bg-slate-800/50 hover:text-slate-200'
+            }`}
+          >
+            <Activity size={20} className="shrink-0 transition-transform group-hover:scale-110" />
+            <span className="font-medium text-sm flex-1 text-left">Spatial Analysis</span>
+            {analysisOpen ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
+          </button>
+
+          {analysisOpen && (
+            <div className="ml-3 border-l border-slate-700 pl-2 space-y-1">
+              {/* Pemilu 2024 */}
+              <button
+                onClick={() => setPemilu2024Open(!pemilu2024Open)}
+                className="w-full flex items-center gap-2 px-3 py-2 rounded-md text-slate-300 hover:bg-slate-800 hover:text-white transition-all text-sm"
+              >
+                <span className="flex-1 text-left font-medium">Pemilu 2024</span>
+                {pemilu2024Open ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+              </button>
+              {pemilu2024Open && (
+                <div className="ml-2 space-y-0.5">
+                  {['PPWP', 'DPD', 'DPR RI', 'DPRD PROVINSI', 'DPRD KABUPATEN'].map(election => (
+                    <button
+                      key={election}
+                      onClick={() => { setSelectedPemilu('pemilu_2024'); setSelectedElection(election as any); }}
+                      className={`w-full text-left px-3 py-1.5 rounded text-xs transition-all ${
+                        selectedPemilu === 'pemilu_2024' && selectedElection === election
+                          ? 'bg-blue-600/20 text-blue-300 border border-blue-500/30'
+                          : 'text-slate-400 hover:bg-slate-800 hover:text-blue-300'
+                      }`}
+                    >
+                      {election}
+                    </button>
+                  ))}
+                </div>
+              )}
+              {/* Pemilu 2019 */}
+              <button
+                onClick={() => setPemilu2019Open(!pemilu2019Open)}
+                className="w-full flex items-center gap-2 px-3 py-2 rounded-md text-slate-300 hover:bg-slate-800 hover:text-white transition-all text-sm"
+              >
+                <span className="flex-1 text-left font-medium">Pemilu 2019</span>
+                {pemilu2019Open ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+              </button>
+              {pemilu2019Open && (
+                <div className="ml-2 space-y-0.5">
+                  {['PPWP', 'DPD', 'DPR RI', 'DPRD PROVINSI', 'DPRD KABUPATEN'].map(election => (
+                    <button
+                      key={election}
+                      onClick={() => { setSelectedPemilu('pemilu_2019'); setSelectedElection(election as any); }}
+                      className={`w-full text-left px-3 py-1.5 rounded text-xs transition-all ${
+                        selectedPemilu === 'pemilu_2019' && selectedElection === election
+                          ? 'bg-blue-600/20 text-blue-300 border border-blue-500/30'
+                          : 'text-slate-400 hover:bg-slate-800 hover:text-blue-300'
+                      }`}
+                    >
+                      {election}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
           <SidebarItem icon={<Database size={20} />} label="Data Store" />
           <SidebarItem icon={<Share2 size={20} />} label="Collaboration" />
         </nav>
@@ -295,9 +455,53 @@ export default function Dashboard() {
       </aside>
 
       {/* ── Main Map ── */}
-      <main className="flex-1 flex flex-col h-full overflow-hidden p-2 lg:p-4">
+      <main className="flex-1 flex flex-col h-full overflow-hidden p-2 lg:p-4 relative">
         <div className="flex-1 rounded-xl overflow-hidden shadow-2xl relative border border-slate-800/60 ring-1 ring-white/5">
           <MapViewer geoData={geoData} flyToFeature={flyToFeature} highlightedKec={highlightedKec} highlightedDesa={highlightedDesa} />
+          
+          {/* ── Floating Spatial Analysis Panel ── */}
+          {aggregatedData && (
+            <div className="absolute top-4 right-4 w-80 bg-slate-900/95 backdrop-blur-md rounded-xl border border-slate-700 shadow-2xl p-4 flex flex-col max-h-[85vh] overflow-hidden text-slate-200 z-10">
+              <div className="flex items-center justify-between mb-3 border-b border-slate-700 pb-2">
+                <h3 className="font-bold text-lg text-blue-400">Analisis {selectedPemilu === 'pemilu_2024' ? '2024' : '2019'} - {selectedElection}</h3>
+                <button onClick={() => setSelectedElection(null)} className="text-slate-400 hover:text-white transition-colors">&times;</button>
+              </div>
+              
+              <div className="text-sm mb-4">
+                <p className="text-cyan-300 font-semibold mb-2">📍 {aggregatedData.regionName}</p>
+                <div className="flex justify-between items-center bg-slate-800/60 p-2.5 rounded-t border border-slate-700/50">
+                  <span className="text-slate-400">Total TPS</span>
+                  <span className="font-bold text-slate-200">{aggregatedData.total_tps.toLocaleString('id-ID')}</span>
+                </div>
+                <div className="flex justify-between items-center bg-slate-800/60 p-2.5 rounded-b border border-slate-700/50 border-t-0">
+                  <span className="text-slate-400">Total Suara Sah</span>
+                  <span className="font-bold text-slate-200">{aggregatedData.total_suara_sah.toLocaleString('id-ID')}</span>
+                </div>
+              </div>
+              
+              <h4 className="font-semibold text-sm mb-2 text-slate-300 border-b border-slate-700 pb-2">Perolehan Suara Calon</h4>
+              <div className="flex-1 overflow-y-auto space-y-2.5 pr-1 scrollbar-thin scrollbar-thumb-slate-600 scrollbar-track-transparent">
+                {aggregatedData.sortedCalon.map(([nama, suara], idx) => (
+                  <div key={idx} className="bg-slate-800/40 rounded p-2.5 border border-slate-700/50">
+                    <div className="flex justify-between text-xs mb-1.5">
+                      <span className="font-medium text-slate-200 pr-2">{nama}</span>
+                      <span className="font-bold text-blue-300">{suara.toLocaleString('id-ID')}</span>
+                    </div>
+                    {/* Progress Bar */}
+                    <div className="w-full bg-slate-900 rounded-full h-1.5 ring-1 ring-slate-700/50">
+                      <div 
+                        className="bg-gradient-to-r from-blue-500 to-cyan-400 h-1.5 rounded-full" 
+                        style={{ width: `${aggregatedData.total_suara_sah > 0 ? (suara / aggregatedData.total_suara_sah) * 100 : 0}%` }}
+                      ></div>
+                    </div>
+                  </div>
+                ))}
+                {aggregatedData.sortedCalon.length === 0 && (
+                  <p className="text-xs text-slate-500 italic text-center py-6">Data tidak tersedia untuk wilayah ini.</p>
+                )}
+              </div>
+            </div>
+          )}
         </div>
       </main>
     </div>

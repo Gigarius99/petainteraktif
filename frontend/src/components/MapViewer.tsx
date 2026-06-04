@@ -110,6 +110,9 @@ export default function MapViewer({ geoData, flyToFeature, highlightedKec, highl
       if (highlightedDesa && getProp(f.properties, 'desa') === highlightedDesa && getProp(f.properties, 'kecamatan') === highlightedKec) {
         return [50, 255, 150, 200]; // green highlight for desa
       }
+      if (highlightedKec === 'ALL') {
+        return [100, 200, 255, 160]; // highlight everything
+      }
       if (highlightedKec && getProp(f.properties, 'kecamatan') === highlightedKec) {
         return [100, 200, 255, 160]; // cyan highlight for kecamatan
       }
@@ -119,6 +122,9 @@ export default function MapViewer({ geoData, flyToFeature, highlightedKec, highl
       if (highlightedDesa && getProp(f.properties, 'desa') === highlightedDesa && getProp(f.properties, 'kecamatan') === highlightedKec) {
         return [100, 255, 150, 255];
       }
+      if (highlightedKec === 'ALL') {
+        return [100, 220, 255, 255];
+      }
       if (highlightedKec && getProp(f.properties, 'kecamatan') === highlightedKec) {
         return [100, 220, 255, 255];
       }
@@ -127,6 +133,9 @@ export default function MapViewer({ geoData, flyToFeature, highlightedKec, highl
     getLineWidth: (f: any) => {
       if (highlightedDesa && getProp(f.properties, 'desa') === highlightedDesa && getProp(f.properties, 'kecamatan') === highlightedKec) {
         return 3;
+      }
+      if (highlightedKec === 'ALL') {
+        return 2.5;
       }
       if (highlightedKec && getProp(f.properties, 'kecamatan') === highlightedKec) {
         return 2.5;
@@ -203,8 +212,14 @@ export default function MapViewer({ geoData, flyToFeature, highlightedKec, highl
         <p className="text-sm text-slate-400 mt-1">Interactive GeoJSON Platform</p>
         {(highlightedKec || highlightedDesa) && (
           <div className="mt-2 border-t border-slate-700 pt-2 flex flex-col gap-1">
-            {highlightedKec && <p className="text-xs text-cyan-400">📍 Kec. {highlightedKec}</p>}
-            {highlightedDesa && <p className="text-xs text-green-400">📍 Desa {highlightedDesa}</p>}
+            {highlightedKec === 'ALL' ? (
+              <p className="text-xs text-blue-400">📍 Seluruh Kabupaten</p>
+            ) : (
+              <>
+                {highlightedKec && <p className="text-xs text-cyan-400">📍 Kec. {highlightedKec}</p>}
+                {highlightedDesa && <p className="text-xs text-green-400">📍 Desa {highlightedDesa}</p>}
+              </>
+            )}
           </div>
         )}
       </div>
