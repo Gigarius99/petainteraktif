@@ -307,7 +307,9 @@ export default function Dashboard() {
       const updated = prev.features.map((f: any) => {
         const fDesa = getProp(f.properties, 'desa');
         const fKec = getProp(f.properties, 'kecamatan');
-        if (fDesa === drawingForDesa && fKec === drawingForKec && !f.geometry) {
+        
+        // Remove the !f.geometry check so it can override empty GeometryCollection
+        if (fDesa === drawingForDesa && fKec === drawingForKec) {
           return { ...f, geometry: newGeometry };
         }
         return f;
