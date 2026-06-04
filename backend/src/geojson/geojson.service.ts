@@ -68,9 +68,13 @@ export class GeojsonService {
     let inserted = 0;
     let skipped = 0;
     for (const feature of geojson.features) {
-      if (!feature.geometry) { skipped++; continue; }
+      let geometryStr = JSON.stringify(feature.geometry);
+      if (!feature.geometry) {
+        // Fallback to empty GeometryCollection if missing
+        geometryStr = JSON.stringify({ type: 'GeometryCollection', geometries: [] });
+      }
+      
       const featureId = randomUUID();
-      const geometryStr = JSON.stringify(feature.geometry);
       const propertiesStr = JSON.stringify(feature.properties || {});
       try {
         await this.prisma.$executeRaw`

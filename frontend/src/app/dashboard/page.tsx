@@ -258,7 +258,12 @@ export default function Dashboard() {
   // ─── Detect features without geometry ───────────────────────────────────
   const missingGeoFeatures = useMemo(() => {
     if (!geoData?.features) return [];
-    return geoData.features.filter((f: any) => !f.geometry || !f.geometry.coordinates);
+    return geoData.features.filter((f: any) => {
+      if (!f.geometry) return true;
+      if (!f.geometry.coordinates && f.geometry.type !== 'GeometryCollection') return true;
+      if (f.geometry.type === 'GeometryCollection' && (!f.geometry.geometries || f.geometry.geometries.length === 0)) return true;
+      return false;
+    });
   }, [geoData]);
 
   // ─── Draw Mode Handlers ──────────────────────────────────────────────────
