@@ -649,7 +649,12 @@ export default function Dashboard() {
                   <div key={idx} className="bg-slate-800/40 rounded p-2.5 border border-slate-700/50">
                     <div className="flex justify-between text-xs mb-1.5">
                       <span className="font-medium text-slate-200 pr-2">{nama}</span>
-                      <span className="font-bold text-blue-300">{suara.toLocaleString('id-ID')}</span>
+                      <span className="font-bold text-blue-300">
+                        {suara.toLocaleString('id-ID')} 
+                        <span className="text-slate-400 font-normal ml-1">
+                          ({aggregatedData.total_suara_sah > 0 ? ((suara / aggregatedData.total_suara_sah) * 100).toFixed(1) : 0}%)
+                        </span>
+                      </span>
                     </div>
                     {/* Progress Bar */}
                     <div className="w-full bg-slate-900 rounded-full h-1.5 ring-1 ring-slate-700/50">
