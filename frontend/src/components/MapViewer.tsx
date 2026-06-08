@@ -28,6 +28,11 @@ interface MapViewerProps {
   onCancelDraw?: () => void;
   onUndoPoint?: () => void;
   drawingForLabel?: string;
+  // Party insight props
+  selectedParty?: string | null;
+  partyFilter?: 'above50' | 'below50' | null;
+  partyDesaPercentages?: Record<string, number>;
+  onPartyFilterChange?: (filter: 'above50' | 'below50' | null) => void;
 }
 
 export default function MapViewer({
@@ -42,6 +47,10 @@ export default function MapViewer({
   onCancelDraw,
   onUndoPoint,
   drawingForLabel,
+  selectedParty,
+  partyFilter,
+  partyDesaPercentages = {},
+  onPartyFilterChange,
 }: MapViewerProps) {
   const [viewState, setViewState] = useState({
     longitude: 118.0149,
@@ -67,7 +76,6 @@ export default function MapViewer({
   useEffect(() => {
     if (geoData?.features?.length > 0) {
       try {
-        // Only center on features with geometry
         const validFeatures = geoData.features.filter((f: any) => f.geometry);
         if (validFeatures.length === 0) return;
         const fc = { ...geoData, features: validFeatures };
@@ -135,7 +143,6 @@ export default function MapViewer({
       })
     : null;
 
-  // Line connecting all drawn points + back to first (closing preview)
   const drawPathPoints = drawingPoints.length >= 2
     ? [...drawingPoints, drawingPoints[0]]
     : drawingPoints;
@@ -152,7 +159,6 @@ export default function MapViewer({
       })
     : null;
 
-  // Filled polygon preview when >= 3 points
   const drawPolygonLayer = drawMode && drawingPoints.length >= 3
     ? new GeoJsonLayer({
         id: 'draw-polygon-preview',
@@ -174,6 +180,36 @@ export default function MapViewer({
       })
     : null;
 
+  // ─── Party-mode color helper ───────────────────────────────────────────────
+  const getPartyFillColor = (f: any): [number, number, number, number] => {
+    const desa = getProp(f.properties, 'desa');
+    const kec = getProp(f.properties, 'kecamatan');
+    const key = `${desa}__${kec}`;
+    const pct = partyDesaPercentages[key];
+
+    if (pct === undefined) return [60, 60, 80, 80]; // no data — dim
+
+    const isAbove = pct >= 50;
+
+    // Filter mode: fade-out non-matching
+    if (partyFilter === 'above50' && !isAbove) return [60, 60, 80, 30];
+    if (partyFilter === 'below50' && isAbove) return [60, 60, 80, 30];
+
+    if (isAbove) return [34, 197, 94, 210];   // green-500
+    return [249, 115, 22, 210];               // orange-500
+  };
+
+  const getPartyLineColor = (f: any): [number, number, number, number] => {
+    const desa = getProp(f.properties, 'desa');
+    const kec = getProp(f.properties, 'kecamatan');
+    const key = `${desa}__${kec}`;
+    const pct = partyDesaPercentages[key];
+    if (pct === undefined) return [80, 80, 100, 100];
+    if (partyFilter === 'above50' && pct < 50) return [80, 80, 100, 50];
+    if (partyFilter === 'below50' && pct >= 50) return [80, 80, 100, 50];
+    return pct >= 50 ? [34, 197, 94, 255] : [249, 115, 22, 255];
+  };
+
   // ─── Normal GeoJSON Layer ──────────────────────────────────────────────────
   const normalLayer = new GeoJsonLayer({
     id: 'geojson-layer',
@@ -185,80 +221,99 @@ export default function MapViewer({
     lineWidthUnits: 'pixels',
     lineWidthMinPixels: 1,
     getFillColor: (f: any) => {
-      if (!f.geometry) return [0, 0, 0, 0]; // hide features without geometry
+      if (!f.geometry) return [0, 0, 0, 0];
+
+      // Party insight mode
+      if (selectedParty && Object.keys(partyDesaPercentages).length > 0) {
+        return getPartyFillColor(f);
+      }
+
+      // Normal highlight
       if (highlightedDesa && getProp(f.properties, 'desa') === highlightedDesa && getProp(f.properties, 'kecamatan') === highlightedKec) {
         return [50, 255, 150, 200];
       }
-      if (highlightedKec === 'ALL') {
-        return [100, 200, 255, 160];
-      }
-      if (highlightedKec && getProp(f.properties, 'kecamatan') === highlightedKec) {
-        return [100, 200, 255, 160];
-      }
+      if (highlightedKec === 'ALL') return [100, 200, 255, 160];
+      if (highlightedKec && getProp(f.properties, 'kecamatan') === highlightedKec) return [100, 200, 255, 160];
       return [160, 160, 180, 130];
     },
     getLineColor: (f: any) => {
       if (!f.geometry) return [0, 0, 0, 0];
+
+      if (selectedParty && Object.keys(partyDesaPercentages).length > 0) {
+        return getPartyLineColor(f);
+      }
+
       if (highlightedDesa && getProp(f.properties, 'desa') === highlightedDesa && getProp(f.properties, 'kecamatan') === highlightedKec) {
         return [100, 255, 150, 255];
       }
-      if (highlightedKec === 'ALL') {
-        return [100, 220, 255, 255];
-      }
-      if (highlightedKec && getProp(f.properties, 'kecamatan') === highlightedKec) {
-        return [100, 220, 255, 255];
-      }
+      if (highlightedKec === 'ALL') return [100, 220, 255, 255];
+      if (highlightedKec && getProp(f.properties, 'kecamatan') === highlightedKec) return [100, 220, 255, 255];
       return [255, 255, 255, 200];
     },
     getLineWidth: (f: any) => {
       if (!f.geometry) return 0;
-      if (highlightedDesa && getProp(f.properties, 'desa') === highlightedDesa && getProp(f.properties, 'kecamatan') === highlightedKec) {
-        return 3;
+      if (selectedParty && Object.keys(partyDesaPercentages).length > 0) {
+        const desa = getProp(f.properties, 'desa');
+        const kec = getProp(f.properties, 'kecamatan');
+        const pct = partyDesaPercentages[`${desa}__${kec}`];
+        if (pct !== undefined) return 2;
+        return 1;
       }
+      if (highlightedDesa && getProp(f.properties, 'desa') === highlightedDesa && getProp(f.properties, 'kecamatan') === highlightedKec) return 3;
       if (highlightedKec === 'ALL') return 2.5;
       if (highlightedKec && getProp(f.properties, 'kecamatan') === highlightedKec) return 2.5;
       return 1.5;
     },
     updateTriggers: {
-      getFillColor: [highlightedKec, highlightedDesa],
-      getLineColor: [highlightedKec, highlightedDesa],
-      getLineWidth: [highlightedKec, highlightedDesa],
+      getFillColor: [highlightedKec, highlightedDesa, selectedParty, partyFilter, partyDesaPercentages],
+      getLineColor: [highlightedKec, highlightedDesa, selectedParty, partyFilter, partyDesaPercentages],
+      getLineWidth: [highlightedKec, highlightedDesa, selectedParty, partyDesaPercentages],
     },
-    autoHighlight: !drawMode,
+    autoHighlight: !drawMode && !selectedParty,
     highlightColor: [255, 255, 0, 255],
   });
 
+  // ─── Tooltip ──────────────────────────────────────────────────────────────
   const handleTooltip = ({ object }: any) => {
     if (drawMode || !object) return null;
     const props = object.properties;
     if (!props) return null;
 
     let html = '';
-    const priorityKeys = ['Kabupaten', 'Kecamatan', 'Desa', 'name', 'KABUPATEN', 'KECAMATAN', 'DESA'];
-    const foundKeys = Object.keys(props).filter(k =>
-      priorityKeys.some(pk => pk.toLowerCase() === k.toLowerCase())
-    );
 
-    if (foundKeys.length > 0) {
-      foundKeys.forEach(k => {
-        html += `<div style="margin-bottom:4px"><b>${k}:</b> ${props[k]}</div>`;
-      });
+    // Party mode tooltip
+    if (selectedParty && Object.keys(partyDesaPercentages).length > 0) {
+      const desa = getProp(props, 'desa') || '-';
+      const kec = getProp(props, 'kecamatan') || '-';
+      const pct = partyDesaPercentages[`${desa}__${kec}`];
+      html = `
+        <div style="margin-bottom:6px"><b>Desa:</b> ${desa}</div>
+        <div style="margin-bottom:4px"><b>Kecamatan:</b> ${kec}</div>
+        <div style="margin-top:6px;border-top:1px solid #334155;padding-top:6px">
+          <b>${selectedParty}:</b> 
+          <span style="color:${pct !== undefined && pct >= 50 ? '#4ade80' : '#fb923c'}">
+            ${pct !== undefined ? pct.toFixed(1) + '%' : 'Tidak ada data'}
+          </span>
+        </div>
+      `;
     } else {
-      Object.keys(props).slice(0, 5).forEach(k => {
-        html += `<div style="margin-bottom:4px"><b>${k}:</b> ${props[k]}</div>`;
-      });
+      const priorityKeys = ['Kabupaten', 'Kecamatan', 'Desa', 'name', 'KABUPATEN', 'KECAMATAN', 'DESA'];
+      const foundKeys = Object.keys(props).filter(k =>
+        priorityKeys.some(pk => pk.toLowerCase() === k.toLowerCase())
+      );
+      if (foundKeys.length > 0) {
+        foundKeys.forEach(k => { html += `<div style="margin-bottom:4px"><b>${k}:</b> ${props[k]}</div>`; });
+      } else {
+        Object.keys(props).slice(0, 5).forEach(k => { html += `<div style="margin-bottom:4px"><b>${k}:</b> ${props[k]}</div>`; });
+      }
     }
 
     return {
       html,
       style: {
-        backgroundColor: '#1e293b',
-        color: '#f8fafc',
-        padding: '12px',
-        borderRadius: '8px',
-        fontSize: '13px',
-        boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.5)',
-        border: '1px solid #334155',
+        backgroundColor: '#1e293b', color: '#f8fafc', padding: '12px',
+        borderRadius: '8px', fontSize: '13px',
+        boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.5)', border: '1px solid #334155',
       }
     };
   };
@@ -270,13 +325,15 @@ export default function MapViewer({
     drawVerticesLayer,
   ].filter(Boolean);
 
-  const handleDeckClick = (info: any, event: any) => {
+  const handleDeckClick = (info: any) => {
     if (!drawMode || !onMapClick) return;
     const { coordinate } = info;
-    if (coordinate) {
-      onMapClick(coordinate[0], coordinate[1]);
-    }
+    if (coordinate) onMapClick(coordinate[0], coordinate[1]);
   };
+
+  // ─── Counts for above/below filter ────────────────────────────────────────
+  const aboveCount = Object.values(partyDesaPercentages).filter(p => p >= 50).length;
+  const belowCount = Object.values(partyDesaPercentages).filter(p => p < 50).length;
 
   return (
     <div className="relative w-full h-full bg-slate-900 rounded-lg overflow-hidden border border-slate-800 shadow-xl">
@@ -300,19 +357,81 @@ export default function MapViewer({
         </Map>
       </DeckGL>
 
-      {/* Brand overlay */}
-      <div className="absolute top-4 left-4 bg-slate-900/80 backdrop-blur-md p-4 rounded-lg border border-slate-700 text-white shadow-lg pointer-events-none">
-        <h2 className="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-blue-400 to-cyan-400">GEO SmartMap</h2>
-        <p className="text-sm text-slate-400 mt-1">Interactive GeoJSON Platform</p>
-        {(highlightedKec || highlightedDesa) && !drawMode && (
-          <div className="mt-2 border-t border-slate-700 pt-2 flex flex-col gap-1">
-            {highlightedKec === 'ALL' ? (
-              <p className="text-xs text-blue-400">📍 Seluruh Kabupaten</p>
-            ) : (
-              <>
-                {highlightedKec && <p className="text-xs text-cyan-400">📍 Kec. {highlightedKec}</p>}
-                {highlightedDesa && <p className="text-xs text-green-400">📍 Desa {highlightedDesa}</p>}
-              </>
+      {/* Brand overlay — becomes party insight panel when party is selected */}
+      <div className={`absolute top-4 left-4 bg-slate-900/90 backdrop-blur-md p-4 rounded-xl border shadow-xl text-white transition-all duration-300 ${
+        selectedParty ? 'border-blue-500/40 w-64' : 'border-slate-700 pointer-events-none'
+      }`}>
+        <h2 className="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-blue-400 to-cyan-400">
+          GEO SmartMap
+        </h2>
+
+        {!selectedParty ? (
+          <>
+            <p className="text-sm text-slate-400 mt-1">Interactive GeoJSON Platform</p>
+            {(highlightedKec || highlightedDesa) && !drawMode && (
+              <div className="mt-2 border-t border-slate-700 pt-2 flex flex-col gap-1">
+                {highlightedKec === 'ALL' ? (
+                  <p className="text-xs text-blue-400">📍 Seluruh Kabupaten</p>
+                ) : (
+                  <>
+                    {highlightedKec && <p className="text-xs text-cyan-400">📍 Kec. {highlightedKec}</p>}
+                    {highlightedDesa && <p className="text-xs text-green-400">📍 Desa {highlightedDesa}</p>}
+                  </>
+                )}
+              </div>
+            )}
+          </>
+        ) : (
+          /* ── Party Insight Panel ── */
+          <div className="mt-2">
+            <p className="text-xs text-slate-400 mb-1">Insight Suara</p>
+            <p className="text-sm font-bold text-blue-300 mb-3 truncate">{selectedParty}</p>
+
+            {/* Legend */}
+            <div className="flex gap-2 mb-3 text-xs">
+              <div className="flex items-center gap-1.5">
+                <div className="w-3 h-3 rounded-full bg-green-500" />
+                <span className="text-slate-300">≥ 50%</span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <div className="w-3 h-3 rounded-full bg-orange-500" />
+                <span className="text-slate-300">&lt; 50%</span>
+              </div>
+            </div>
+
+            {/* Filter buttons */}
+            <div className="flex flex-col gap-2">
+              <button
+                onClick={() => onPartyFilterChange?.(partyFilter === 'above50' ? null : 'above50')}
+                className={`flex items-center justify-between w-full px-3 py-2 rounded-lg text-xs font-semibold transition-all border ${
+                  partyFilter === 'above50'
+                    ? 'bg-green-600 text-white border-green-400 shadow-lg shadow-green-900/40'
+                    : 'bg-green-500/10 text-green-300 border-green-500/30 hover:bg-green-500/20'
+                }`}
+              >
+                <span>▲ Di atas 50%</span>
+                <span className="bg-green-900/60 px-2 py-0.5 rounded-full">{aboveCount} desa</span>
+              </button>
+              <button
+                onClick={() => onPartyFilterChange?.(partyFilter === 'below50' ? null : 'below50')}
+                className={`flex items-center justify-between w-full px-3 py-2 rounded-lg text-xs font-semibold transition-all border ${
+                  partyFilter === 'below50'
+                    ? 'bg-orange-600 text-white border-orange-400 shadow-lg shadow-orange-900/40'
+                    : 'bg-orange-500/10 text-orange-300 border-orange-500/30 hover:bg-orange-500/20'
+                }`}
+              >
+                <span>▼ Di bawah 50%</span>
+                <span className="bg-orange-900/60 px-2 py-0.5 rounded-full">{belowCount} desa</span>
+              </button>
+            </div>
+
+            {partyFilter && (
+              <button
+                onClick={() => onPartyFilterChange?.(null)}
+                className="mt-2 w-full text-xs text-slate-400 hover:text-slate-200 transition-colors"
+              >
+                ✕ Reset filter
+              </button>
             )}
           </div>
         )}
@@ -321,7 +440,6 @@ export default function MapViewer({
       {/* ─── Draw Mode Overlay ─────────────────────────────────────────────── */}
       {drawMode && (
         <>
-          {/* Top banner */}
           <div className="absolute top-0 left-0 right-0 bg-amber-500/90 backdrop-blur-sm text-slate-900 px-4 py-2.5 flex items-center justify-between z-20 shadow-lg">
             <div className="flex items-center gap-2">
               <span className="text-lg">✏️</span>
@@ -356,8 +474,6 @@ export default function MapViewer({
               </button>
             </div>
           </div>
-
-          {/* Crosshair hint */}
           <div className="absolute bottom-16 left-1/2 -translate-x-1/2 bg-slate-900/80 text-slate-300 text-xs px-4 py-2 rounded-full backdrop-blur-sm pointer-events-none z-20">
             🖱️ Klik untuk tambah titik sudut polygon desa
           </div>

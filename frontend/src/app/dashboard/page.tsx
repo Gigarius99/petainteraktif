@@ -41,6 +41,10 @@ export default function Dashboard() {
   const [missingGeoOpen, setMissingGeoOpen] = useState(false);
   const [hasUnsavedDraw, setHasUnsavedDraw] = useState(false);
 
+  // ─── Party Insight States ──────────────────────────────────────────────
+  const [selectedParty, setSelectedParty] = useState<string | null>(null);
+  const [partyFilter, setPartyFilter] = useState<'above50' | 'below50' | null>(null);
+
   const fileInputRef = useRef<HTMLInputElement>(null);
   const router = useRouter();
 
@@ -237,6 +241,42 @@ export default function Dashboard() {
 
     return { ...result, sortedCalon, regionName };
   }, [geoData, selectedKec, highlightedDesa, selectedPemilu, selectedElection, desaByKec]);
+
+  // ─── Per-Desa Party Percentages for map highlight ───────────────────────
+  const partyDesaPercentages = useMemo(() => {
+    if (!selectedParty || !selectedPemilu || !selectedElection || !geoData?.features) return {};
+
+    const result: Record<string, number> = {};
+    geoData.features.forEach((f: any) => {
+      const desa = getProp(f.properties, 'desa');
+      const kec = getProp(f.properties, 'kecamatan');
+      if (!desa || !kec) return;
+
+      const pemiluData = f.properties[selectedPemilu];
+      if (!pemiluData) return;
+      const electionData = pemiluData[selectedElection] || pemiluData[selectedElection?.toUpperCase?.()];
+      if (!electionData) return;
+
+      const totalSuaraSah = electionData.total_suara_sah || 0;
+      const partyVotes = electionData.calon?.[selectedParty] || 0;
+      if (totalSuaraSah > 0) {
+        result[`${desa}__${kec}`] = (partyVotes / totalSuaraSah) * 100;
+      }
+    });
+    return result;
+  }, [selectedParty, selectedPemilu, selectedElection, geoData]);
+
+  // Toggle party selection; reset filter when switching party
+  const handlePartyClick = useCallback((partyName: string) => {
+    setSelectedParty(prev => {
+      if (prev === partyName) {
+        setPartyFilter(null);
+        return null;
+      }
+      setPartyFilter(null);
+      return partyName;
+    });
+  }, []);
 
   // ─── Handler klik Desa: fly ke desa spesifik ────────────────────────────
   const handleDesaClick = (feature: any) => {
@@ -621,6 +661,10 @@ export default function Dashboard() {
             onCancelDraw={handleCancelDraw}
             onUndoPoint={handleUndoPoint}
             drawingForLabel={drawingForDesa ? `Desa ${drawingForDesa}, Kec. ${drawingForKec}` : undefined}
+            selectedParty={selectedParty}
+            partyFilter={partyFilter}
+            partyDesaPercentages={partyDesaPercentages}
+            onPartyFilterChange={setPartyFilter}
           />
           
           {/* ── Floating Spatial Analysis Panel ── */}
@@ -628,7 +672,7 @@ export default function Dashboard() {
             <div className="absolute top-4 right-4 w-80 bg-slate-900/95 backdrop-blur-md rounded-xl border border-slate-700 shadow-2xl p-4 flex flex-col max-h-[85vh] overflow-hidden text-slate-200 z-10">
               <div className="flex items-center justify-between mb-3 border-b border-slate-700 pb-2">
                 <h3 className="font-bold text-lg text-blue-400">Analisis {selectedPemilu === 'pemilu_2024' ? '2024' : '2019'} - {selectedElection}</h3>
-                <button onClick={() => setSelectedElection(null)} className="text-slate-400 hover:text-white transition-colors">&times;</button>
+                <button onClick={() => { setSelectedElection(null); setSelectedParty(null); setPartyFilter(null); }} className="text-slate-400 hover:text-white transition-colors">&times;</button>
               </div>
               
               <div className="text-sm mb-4">
@@ -643,28 +687,46 @@ export default function Dashboard() {
                 </div>
               </div>
               
-              <h4 className="font-semibold text-sm mb-2 text-slate-300 border-b border-slate-700 pb-2">Perolehan Suara Calon</h4>
+              <h4 className="font-semibold text-sm mb-2 text-slate-300 border-b border-slate-700 pb-2">
+                Perolehan Suara Calon
+                {selectedParty && <span className="text-xs text-blue-400 ml-2 font-normal">({selectedParty} dipilih)</span>}
+              </h4>
+              <p className="text-xs text-slate-500 italic mb-2">Klik kartu untuk highlight di peta</p>
               <div className="flex-1 overflow-y-auto space-y-2.5 pr-1 scrollbar-thin scrollbar-thumb-slate-600 scrollbar-track-transparent">
-                {aggregatedData.sortedCalon.map(([nama, suara], idx) => (
-                  <div key={idx} className="bg-slate-800/40 rounded p-2.5 border border-slate-700/50">
-                    <div className="flex justify-between text-xs mb-1.5">
-                      <span className="font-medium text-slate-200 pr-2">{nama}</span>
-                      <span className="font-bold text-blue-300">
-                        {suara.toLocaleString('id-ID')} 
-                        <span className="text-slate-400 font-normal ml-1">
-                          ({aggregatedData.total_suara_sah > 0 ? ((suara / aggregatedData.total_suara_sah) * 100).toFixed(1) : 0}%)
+                {aggregatedData.sortedCalon.map(([nama, suara]: [string, number], idx: number) => {
+                  const pct = aggregatedData.total_suara_sah > 0 ? (suara / aggregatedData.total_suara_sah) * 100 : 0;
+                  const isSelected = selectedParty === nama;
+                  return (
+                    <button
+                      key={idx}
+                      onClick={() => handlePartyClick(nama)}
+                      className={`w-full text-left rounded p-2.5 border transition-all duration-200 ${
+                        isSelected
+                          ? 'bg-blue-600/25 border-blue-400/60 ring-1 ring-blue-400/40 shadow-lg shadow-blue-900/20'
+                          : 'bg-slate-800/40 border-slate-700/50 hover:bg-slate-700/60 hover:border-slate-500/60'
+                      }`}
+                    >
+                      <div className="flex justify-between text-xs mb-1.5">
+                        <span className={`font-medium pr-2 ${isSelected ? 'text-blue-200' : 'text-slate-200'}`}>
+                          {isSelected && <span className="mr-1">📍</span>}{nama}
                         </span>
-                      </span>
-                    </div>
-                    {/* Progress Bar */}
-                    <div className="w-full bg-slate-900 rounded-full h-1.5 ring-1 ring-slate-700/50">
-                      <div 
-                        className="bg-gradient-to-r from-blue-500 to-cyan-400 h-1.5 rounded-full" 
-                        style={{ width: `${aggregatedData.total_suara_sah > 0 ? (suara / aggregatedData.total_suara_sah) * 100 : 0}%` }}
-                      ></div>
-                    </div>
-                  </div>
-                ))}
+                        <span className="font-bold text-blue-300">
+                          {suara.toLocaleString('id-ID')}
+                          <span className="text-slate-400 font-normal ml-1">
+                            ({pct.toFixed(1)}%)
+                          </span>
+                        </span>
+                      </div>
+                      {/* Progress Bar */}
+                      <div className="w-full bg-slate-900 rounded-full h-1.5 ring-1 ring-slate-700/50">
+                        <div
+                          className={`h-1.5 rounded-full ${isSelected ? 'bg-gradient-to-r from-blue-400 to-cyan-300' : 'bg-gradient-to-r from-blue-500 to-cyan-400'}`}
+                          style={{ width: `${pct}%` }}
+                        />
+                      </div>
+                    </button>
+                  );
+                })}
                 {aggregatedData.sortedCalon.length === 0 && (
                   <p className="text-xs text-slate-500 italic text-center py-6">Data tidak tersedia untuk wilayah ini.</p>
                 )}
