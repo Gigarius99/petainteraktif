@@ -252,6 +252,16 @@ export default function Dashboard() {
       const kec = getProp(f.properties, 'kecamatan');
       if (!desa || !kec) return;
 
+      // ── Scope filter: hanya hitung desa sesuai pilihan aktif ──────────────
+      if (highlightedDesa && selectedKec && selectedKec !== 'ALL') {
+        // Mode desa: hanya highlight 1 desa spesifik
+        if (desa !== highlightedDesa || kec !== selectedKec) return;
+      } else if (selectedKec && selectedKec !== 'ALL') {
+        // Mode kecamatan: hanya highlight desa-desa dalam kecamatan tersebut
+        if (kec !== selectedKec) return;
+      }
+      // Mode ALL / Kabupaten → semua desa diikutsertakan
+
       const pemiluData = f.properties[selectedPemilu];
       if (!pemiluData) return;
       const electionData = pemiluData[selectedElection] || pemiluData[selectedElection?.toUpperCase?.()];
@@ -264,7 +274,7 @@ export default function Dashboard() {
       }
     });
     return result;
-  }, [selectedParty, selectedPemilu, selectedElection, geoData]);
+  }, [selectedParty, selectedPemilu, selectedElection, geoData, selectedKec, highlightedDesa]);
 
   // Toggle party selection; reset filter when switching party
   const handlePartyClick = useCallback((partyName: string) => {
