@@ -50,6 +50,7 @@ export default function Dashboard() {
   // ─── PFI States ────────────────────────────────────────────────────────
   const [pfiOpen, setPfiOpen] = useState(false);
   const [isPFIMode, setIsPFIMode] = useState(false);
+  const [pfiClickedDesa, setPfiClickedDesa] = useState<{ desa: string; kec: string } | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const router = useRouter();
@@ -334,6 +335,44 @@ export default function Dashboard() {
       topDominant: [...sortedDesas].reverse().slice(0, 10)
     };
   }, [isPFIMode, aggregatedData, pfiDesaScores, highlightedDesa]);
+
+  // ─── PFI Clicked Desa Detail ──────────────────────────────────────────────
+  const pfiClickedDesaDetail = useMemo(() => {
+    if (!isPFIMode || !pfiClickedDesa || !geoData?.features || !selectedPemilu || !selectedElection) return null;
+
+    const feature = geoData.features.find((f: any) => {
+      const d = getProp(f.properties, 'desa');
+      const k = getProp(f.properties, 'kecamatan');
+      return d === pfiClickedDesa.desa && k === pfiClickedDesa.kec;
+    });
+    if (!feature) return null;
+
+    const props = feature.properties;
+    const pemiluData = props[selectedPemilu];
+    if (!pemiluData) return null;
+    const electionData = pemiluData[selectedElection] || pemiluData[selectedElection?.toUpperCase?.()];
+    if (!electionData || !electionData.calon) return null;
+
+    const totalSuaraSah: number = electionData.total_suara_sah || 0;
+    const sortedCalon: [string, number][] = Object.entries(electionData.calon)
+      .map(([n, v]) => [n, Number(v) || 0] as [string, number])
+      .sort((a, b) => b[1] - a[1]);
+
+    const votes = sortedCalon.map(c => c[1]);
+    const pfiScore = calculatePFI(votes);
+    const hhi = calculateHHI(votes);
+
+    return {
+      desa: pfiClickedDesa.desa,
+      kec: pfiClickedDesa.kec,
+      pfiScore,
+      hhi,
+      category: getPFICategory(pfiScore),
+      color: getPFIColor(pfiScore),
+      totalSuaraSah,
+      sortedCalon,
+    };
+  }, [isPFIMode, pfiClickedDesa, geoData, selectedPemilu, selectedElection]);
 
   // Toggle party selection; reset filter when switching party
   const handlePartyClick = useCallback((partyName: string) => {
@@ -767,6 +806,7 @@ export default function Dashboard() {
             onPartyFilterChange={setPartyFilter}
             isPFIMode={isPFIMode}
             pfiDesaScores={pfiDesaScores}
+            onPfiDesaClick={(desa, kec) => setPfiClickedDesa({ desa, kec })}
           />
           
           {/* ── Floating Spatial Analysis Panel ── */}
@@ -776,7 +816,7 @@ export default function Dashboard() {
                 <h3 className="font-bold text-lg text-blue-400">
                   {isPFIMode ? 'Fragmentasi (PFI)' : 'Analisis'} - {selectedElection}
                 </h3>
-                <button onClick={() => { setSelectedElection(null); setSelectedParty(null); setPartyFilter(null); setIsPFIMode(false); }} className="text-slate-400 hover:text-white transition-colors">&times;</button>
+                <button onClick={() => { setSelectedElection(null); setSelectedParty(null); setPartyFilter(null); setIsPFIMode(false); setPfiClickedDesa(null); }} className="text-slate-400 hover:text-white transition-colors">&times;</button>
               </div>
               
               <div className="text-sm mb-4">
@@ -793,60 +833,139 @@ export default function Dashboard() {
               
               {isPFIMode && aggregatedPfi ? (
                 <div className="flex-1 overflow-y-auto pr-1 scrollbar-thin scrollbar-thumb-slate-600 scrollbar-track-transparent">
-                  {aggregatedPfi.score < 0 ? (
-                    <div className="p-4 bg-slate-800/60 border border-slate-700/50 rounded-lg text-center">
-                      <p className="text-sm text-slate-400">Data tidak cukup untuk menghitung PFI di wilayah ini.</p>
-                    </div>
-                  ) : (
+
+                  {/* ── Clicked Desa Detail View ── */}
+                  {pfiClickedDesaDetail ? (
                     <>
-                      <div className="bg-slate-800/40 border border-slate-700/50 rounded-lg p-3 mb-4 text-center shadow-inner">
-                        <p className="text-xs text-slate-400 uppercase tracking-wider mb-1">Skor PFI</p>
-                        <p className="text-4xl font-bold mb-1" style={{ color: aggregatedPfi.color }}>
-                          {aggregatedPfi.score.toFixed(1)}
-                        </p>
-                        <div 
-                          className="text-xs font-semibold px-2 py-1 rounded-full inline-block mt-1"
-                          style={{ backgroundColor: `${aggregatedPfi.color}20`, color: aggregatedPfi.color, border: `1px solid ${aggregatedPfi.color}40` }}
-                        >
-                          {aggregatedPfi.category}
+                      {/* Back button */}
+                      <button
+                        onClick={() => setPfiClickedDesa(null)}
+                        className="flex items-center gap-1.5 text-xs text-slate-400 hover:text-slate-200 mb-3 transition-colors"
+                      >
+                        ← Kembali ke Ringkasan
+                      </button>
+
+                      {/* Desa header */}
+                      <div className="bg-slate-800/40 border border-slate-700/50 rounded-lg p-3 mb-4 shadow-inner">
+                        <p className="text-xs text-slate-400 uppercase tracking-wider mb-0.5">Desa</p>
+                        <p className="text-base font-bold text-white">{pfiClickedDesaDetail.desa}</p>
+                        <p className="text-xs text-slate-400">Kec. {pfiClickedDesaDetail.kec}</p>
+
+                        <div className="mt-3 pt-3 border-t border-slate-700/50 text-center">
+                          <p className="text-xs text-slate-400 uppercase tracking-wider mb-1">Skor PFI</p>
+                          <p className="text-3xl font-bold" style={{ color: pfiClickedDesaDetail.color }}>
+                            {pfiClickedDesaDetail.pfiScore.toFixed(1)}
+                          </p>
+                          <div
+                            className="text-xs font-semibold px-2 py-1 rounded-full inline-block mt-1"
+                            style={{ backgroundColor: `${pfiClickedDesaDetail.color}20`, color: pfiClickedDesaDetail.color, border: `1px solid ${pfiClickedDesaDetail.color}40` }}
+                          >
+                            {pfiClickedDesaDetail.category}
+                          </div>
+                          <p className="text-xs text-slate-500 mt-2">
+                            HHI: {pfiClickedDesaDetail.hhi.toFixed(4)} &bull; Total Suara: {pfiClickedDesaDetail.totalSuaraSah.toLocaleString('id-ID')}
+                          </p>
                         </div>
-                        <p className="text-xs text-slate-500 mt-3 pt-2 border-t border-slate-700/50">
-                          HHI: {aggregatedPfi.hhi.toFixed(4)} &bull; {aggregatedData.sortedCalon.length} Calon
-                        </p>
                       </div>
 
-                      {!highlightedDesa && aggregatedPfi.topFragmented.length > 0 && (
-                        <div className="mb-4">
-                          <h4 className="font-semibold text-xs text-slate-300 mb-2 uppercase tracking-wide">Desa Paling Cair (Fragmentasi Tinggi)</h4>
-                          <div className="space-y-1.5">
-                            {aggregatedPfi.topFragmented.slice(0, 5).map(([id, score], idx) => {
-                              const [desa] = id.split('__');
-                              return (
-                                <div key={idx} className="flex justify-between items-center text-xs bg-slate-800/30 p-1.5 rounded">
-                                  <span className="text-slate-300 truncate pr-2">{idx + 1}. {desa}</span>
-                                  <span className="font-mono font-medium" style={{ color: getPFIColor(score) }}>{score.toFixed(1)}</span>
-                                </div>
-                              );
-                            })}
-                          </div>
+                      {/* Vote breakdown per candidate */}
+                      <h4 className="font-semibold text-xs text-slate-300 mb-2 uppercase tracking-wide">Persebaran Suara Calon</h4>
+                      <div className="space-y-2">
+                        {pfiClickedDesaDetail.sortedCalon.map(([nama, suara], idx) => {
+                          const pct = pfiClickedDesaDetail.totalSuaraSah > 0
+                            ? (suara / pfiClickedDesaDetail.totalSuaraSah) * 100
+                            : 0;
+                          // Color bar based on vote share
+                          const barColor = pct >= 50 ? '#22c55e' : pct >= 25 ? '#eab308' : pct >= 10 ? '#f97316' : '#64748b';
+                          return (
+                            <div key={idx} className="bg-slate-800/30 border border-slate-700/30 rounded p-2">
+                              <div className="flex justify-between items-baseline text-xs mb-1.5">
+                                <span className="font-medium text-slate-200 pr-2 truncate max-w-[60%]">{idx + 1}. {nama}</span>
+                                <span className="font-bold text-slate-100 shrink-0">
+                                  {suara.toLocaleString('id-ID')}
+                                  <span className="text-slate-400 font-normal ml-1">({pct.toFixed(1)}%)</span>
+                                </span>
+                              </div>
+                              <div className="w-full bg-slate-900/80 rounded-full h-1.5">
+                                <div
+                                  className="h-1.5 rounded-full transition-all duration-300"
+                                  style={{ width: `${pct}%`, backgroundColor: barColor }}
+                                />
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </>
+                  ) : (
+                    /* ── Aggregated Ranking View (default) ── */
+                    <>
+                      {aggregatedPfi.score < 0 ? (
+                        <div className="p-4 bg-slate-800/60 border border-slate-700/50 rounded-lg text-center">
+                          <p className="text-sm text-slate-400">Data tidak cukup untuk menghitung PFI di wilayah ini.</p>
                         </div>
-                      )}
+                      ) : (
+                        <>
+                          <div className="bg-slate-800/40 border border-slate-700/50 rounded-lg p-3 mb-4 text-center shadow-inner">
+                            <p className="text-xs text-slate-400 uppercase tracking-wider mb-1">Skor PFI</p>
+                            <p className="text-4xl font-bold mb-1" style={{ color: aggregatedPfi.color }}>
+                              {aggregatedPfi.score.toFixed(1)}
+                            </p>
+                            <div
+                              className="text-xs font-semibold px-2 py-1 rounded-full inline-block mt-1"
+                              style={{ backgroundColor: `${aggregatedPfi.color}20`, color: aggregatedPfi.color, border: `1px solid ${aggregatedPfi.color}40` }}
+                            >
+                              {aggregatedPfi.category}
+                            </div>
+                            <p className="text-xs text-slate-500 mt-3 pt-2 border-t border-slate-700/50">
+                              HHI: {aggregatedPfi.hhi.toFixed(4)} &bull; {aggregatedData.sortedCalon.length} Calon
+                            </p>
+                          </div>
 
-                      {!highlightedDesa && aggregatedPfi.topDominant.length > 0 && (
-                        <div className="mb-4">
-                          <h4 className="font-semibold text-xs text-slate-300 mb-2 uppercase tracking-wide">Desa Paling Stabil (Dominan)</h4>
-                          <div className="space-y-1.5">
-                            {aggregatedPfi.topDominant.slice(0, 5).map(([id, score], idx) => {
-                              const [desa] = id.split('__');
-                              return (
-                                <div key={idx} className="flex justify-between items-center text-xs bg-slate-800/30 p-1.5 rounded">
-                                  <span className="text-slate-300 truncate pr-2">{idx + 1}. {desa}</span>
-                                  <span className="font-mono font-medium" style={{ color: getPFIColor(score) }}>{score.toFixed(1)}</span>
-                                </div>
-                              );
-                            })}
-                          </div>
-                        </div>
+                          <p className="text-xs text-slate-500 italic mb-3">💡 Klik desa di peta untuk lihat detail</p>
+
+                          {!highlightedDesa && aggregatedPfi.topFragmented.length > 0 && (
+                            <div className="mb-4">
+                              <h4 className="font-semibold text-xs text-slate-300 mb-2 uppercase tracking-wide">Desa Paling Cair (Fragmentasi Tinggi)</h4>
+                              <div className="space-y-1.5">
+                                {aggregatedPfi.topFragmented.slice(0, 5).map(([id, score], idx) => {
+                                  const [desa, kec] = id.split('__');
+                                  return (
+                                    <button
+                                      key={idx}
+                                      onClick={() => setPfiClickedDesa({ desa, kec })}
+                                      className="flex justify-between items-center text-xs bg-slate-800/30 hover:bg-slate-700/50 p-1.5 rounded w-full transition-colors"
+                                    >
+                                      <span className="text-slate-300 truncate pr-2">{idx + 1}. {desa}</span>
+                                      <span className="font-mono font-medium shrink-0" style={{ color: getPFIColor(score) }}>{score.toFixed(1)}</span>
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          )}
+
+                          {!highlightedDesa && aggregatedPfi.topDominant.length > 0 && (
+                            <div className="mb-4">
+                              <h4 className="font-semibold text-xs text-slate-300 mb-2 uppercase tracking-wide">Desa Paling Stabil (Dominan)</h4>
+                              <div className="space-y-1.5">
+                                {aggregatedPfi.topDominant.slice(0, 5).map(([id, score], idx) => {
+                                  const [desa, kec] = id.split('__');
+                                  return (
+                                    <button
+                                      key={idx}
+                                      onClick={() => setPfiClickedDesa({ desa, kec })}
+                                      className="flex justify-between items-center text-xs bg-slate-800/30 hover:bg-slate-700/50 p-1.5 rounded w-full transition-colors"
+                                    >
+                                      <span className="text-slate-300 truncate pr-2">{idx + 1}. {desa}</span>
+                                      <span className="font-mono font-medium shrink-0" style={{ color: getPFIColor(score) }}>{score.toFixed(1)}</span>
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          )}
+                        </>
                       )}
                     </>
                   )}

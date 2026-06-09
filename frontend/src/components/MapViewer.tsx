@@ -38,6 +38,7 @@ interface MapViewerProps {
   // PFI Mode props
   isPFIMode?: boolean;
   pfiDesaScores?: Record<string, number>;
+  onPfiDesaClick?: (desa: string, kec: string) => void;
 }
 
 // Helper: Hex to RGBA
@@ -70,6 +71,7 @@ export default function MapViewer({
   onPartyFilterChange,
   isPFIMode = false,
   pfiDesaScores = {},
+  onPfiDesaClick,
 }: MapViewerProps) {
   const [viewState, setViewState] = useState({
     longitude: 118.0149,
@@ -397,9 +399,19 @@ export default function MapViewer({
   ].filter(Boolean);
 
   const handleDeckClick = (info: any) => {
-    if (!drawMode || !onMapClick) return;
-    const { coordinate } = info;
-    if (coordinate) onMapClick(coordinate[0], coordinate[1]);
+    // In draw mode: record coordinate
+    if (drawMode && onMapClick) {
+      const { coordinate } = info;
+      if (coordinate) onMapClick(coordinate[0], coordinate[1]);
+      return;
+    }
+    // In PFI mode: fire desa click callback
+    if (isPFIMode && onPfiDesaClick && info.object?.properties) {
+      const props = info.object.properties;
+      const desa = getProp(props, 'desa');
+      const kec = getProp(props, 'kecamatan');
+      if (desa && kec) onPfiDesaClick(desa, kec);
+    }
   };
 
   // ─── Counts for above/below filter ────────────────────────────────────────
