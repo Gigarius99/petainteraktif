@@ -15,6 +15,8 @@ function getProp(props: any, key: string): string | null {
   return found ? String(props[found]) : null;
 }
 
+import { getPFIColor, getPFICategory } from '@/utils/pfi';
+
 interface MapViewerProps {
   geoData?: any;
   flyToFeature?: any;
@@ -33,6 +35,21 @@ interface MapViewerProps {
   partyFilter?: 'above50' | 'below50' | null;
   partyDesaPercentages?: Record<string, number>;
   onPartyFilterChange?: (filter: 'above50' | 'below50' | null) => void;
+  // PFI Mode props
+  isPFIMode?: boolean;
+  pfiDesaScores?: Record<string, number>;
+}
+
+// Helper: Hex to RGBA
+function hexToRgba(hex: string, alpha = 255): [number, number, number, number] {
+  const c = hex.substring(1).split('');
+  if (c.length === 3) {
+    c[0] += c[0]; c[1] += c[1]; c[2] += c[2];
+  }
+  const r = parseInt(c[0] + c[1] || '0', 16);
+  const g = parseInt(c[2] + c[3] || '0', 16);
+  const b = parseInt(c[4] + c[5] || '0', 16);
+  return [r, g, b, alpha];
 }
 
 export default function MapViewer({
@@ -51,6 +68,8 @@ export default function MapViewer({
   partyFilter,
   partyDesaPercentages = {},
   onPartyFilterChange,
+  isPFIMode = false,
+  pfiDesaScores = {},
 }: MapViewerProps) {
   const [viewState, setViewState] = useState({
     longitude: 118.0149,
@@ -210,6 +229,32 @@ export default function MapViewer({
     return pct >= 50 ? [34, 197, 94, 255] : [249, 115, 22, 255];
   };
 
+
+  // ─── PFI-mode color helper ───────────────────────────────────────────────
+  const getPfiLayerFillColor = (f: any): [number, number, number, number] => {
+    const desa = getProp(f.properties, 'desa');
+    const kec = getProp(f.properties, 'kecamatan');
+    const key = `${desa}__${kec}`;
+    const score = pfiDesaScores[key];
+
+    if (score === undefined || score < 0) return [60, 60, 80, 80]; // no data — dim
+
+    const hex = getPFIColor(score);
+    return hexToRgba(hex, 210);
+  };
+
+  const getPfiLayerLineColor = (f: any): [number, number, number, number] => {
+    const desa = getProp(f.properties, 'desa');
+    const kec = getProp(f.properties, 'kecamatan');
+    const key = `${desa}__${kec}`;
+    const score = pfiDesaScores[key];
+
+    if (score === undefined || score < 0) return [80, 80, 100, 100];
+    
+    const hex = getPFIColor(score);
+    return hexToRgba(hex, 255);
+  };
+
   // ─── Normal GeoJSON Layer ──────────────────────────────────────────────────
   const normalLayer = new GeoJsonLayer({
     id: 'geojson-layer',
@@ -222,6 +267,11 @@ export default function MapViewer({
     lineWidthMinPixels: 1,
     getFillColor: (f: any) => {
       if (!f.geometry) return [0, 0, 0, 0];
+
+      // PFI insight mode
+      if (isPFIMode && Object.keys(pfiDesaScores).length > 0) {
+        return getPfiLayerFillColor(f);
+      }
 
       // Party insight mode
       if (selectedParty && Object.keys(partyDesaPercentages).length > 0) {
@@ -238,6 +288,10 @@ export default function MapViewer({
     },
     getLineColor: (f: any) => {
       if (!f.geometry) return [0, 0, 0, 0];
+
+      if (isPFIMode && Object.keys(pfiDesaScores).length > 0) {
+        return getPfiLayerLineColor(f);
+      }
 
       if (selectedParty && Object.keys(partyDesaPercentages).length > 0) {
         return getPartyLineColor(f);
@@ -265,11 +319,11 @@ export default function MapViewer({
       return 1.5;
     },
     updateTriggers: {
-      getFillColor: [highlightedKec, highlightedDesa, selectedParty, partyFilter, partyDesaPercentages],
-      getLineColor: [highlightedKec, highlightedDesa, selectedParty, partyFilter, partyDesaPercentages],
-      getLineWidth: [highlightedKec, highlightedDesa, selectedParty, partyDesaPercentages],
+      getFillColor: [highlightedKec, highlightedDesa, selectedParty, partyFilter, partyDesaPercentages, isPFIMode, pfiDesaScores],
+      getLineColor: [highlightedKec, highlightedDesa, selectedParty, partyFilter, partyDesaPercentages, isPFIMode, pfiDesaScores],
+      getLineWidth: [highlightedKec, highlightedDesa, selectedParty, partyDesaPercentages, isPFIMode, pfiDesaScores],
     },
-    autoHighlight: !drawMode && !selectedParty,
+    autoHighlight: !drawMode && !selectedParty && !isPFIMode,
     highlightColor: [255, 255, 0, 255],
   });
 
@@ -281,8 +335,25 @@ export default function MapViewer({
 
     let html = '';
 
+    // PFI mode tooltip
+    if (isPFIMode && Object.keys(pfiDesaScores).length > 0) {
+      const desa = getProp(props, 'desa') || '-';
+      const kec = getProp(props, 'kecamatan') || '-';
+      const score = pfiDesaScores[`${desa}__${kec}`];
+      html = `
+        <div style="margin-bottom:6px"><b>Desa:</b> ${desa}</div>
+        <div style="margin-bottom:4px"><b>Kecamatan:</b> ${kec}</div>
+        <div style="margin-top:6px;border-top:1px solid #334155;padding-top:6px">
+          <b>Fragmentasi Politik:</b> 
+          ${score !== undefined && score >= 0 ? `
+            <br/><span style="color:${getPFIColor(score)};font-size:16px;font-weight:bold">${score.toFixed(1)}</span>
+            <br/><span style="color:#cbd5e1;font-size:11px">${getPFICategory(score)}</span>
+          ` : '<br/><span style="color:#94a3b8">Data tidak cukup</span>'}
+        </div>
+      `;
+    }
     // Party mode tooltip
-    if (selectedParty && Object.keys(partyDesaPercentages).length > 0) {
+    else if (selectedParty && Object.keys(partyDesaPercentages).length > 0) {
       const desa = getProp(props, 'desa') || '-';
       const kec = getProp(props, 'kecamatan') || '-';
       const pct = partyDesaPercentages[`${desa}__${kec}`];
@@ -359,13 +430,38 @@ export default function MapViewer({
 
       {/* Brand overlay — becomes party insight panel when party is selected */}
       <div className={`absolute top-4 left-4 bg-slate-900/90 backdrop-blur-md p-4 rounded-xl border shadow-xl text-white transition-all duration-300 ${
-        selectedParty ? 'border-blue-500/40 w-64' : 'border-slate-700 pointer-events-none'
+        selectedParty ? 'border-blue-500/40 w-64' : isPFIMode ? 'border-purple-500/40 w-64' : 'border-slate-700 pointer-events-none'
       }`}>
         <h2 className="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-blue-400 to-cyan-400">
           GEO SmartMap
         </h2>
 
-        {!selectedParty ? (
+        {isPFIMode ? (
+          /* ── PFI Legend Panel ── */
+          <div className="mt-2">
+            <p className="text-xs text-slate-400 mb-1">Index Fragmentasi Politik</p>
+            <p className="text-sm font-bold text-purple-300 mb-3 truncate">Skala (0-100)</p>
+
+            <div className="flex flex-col gap-2 text-xs">
+              <div className="flex items-center gap-2">
+                <div className="w-3 h-3 rounded-full" style={{ backgroundColor: getPFIColor(20) }} />
+                <span className="text-slate-300">0-30: Dominan</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <div className="w-3 h-3 rounded-full" style={{ backgroundColor: getPFIColor(40) }} />
+                <span className="text-slate-300">31-50: Stabil</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <div className="w-3 h-3 rounded-full" style={{ backgroundColor: getPFIColor(60) }} />
+                <span className="text-slate-300">51-70: Kompetitif</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <div className="w-3 h-3 rounded-full" style={{ backgroundColor: getPFIColor(80) }} />
+                <span className="text-slate-300">71-100: Sangat Cair</span>
+              </div>
+            </div>
+          </div>
+        ) : !selectedParty ? (
           <>
             <p className="text-sm text-slate-400 mt-1">Interactive GeoJSON Platform</p>
             {(highlightedKec || highlightedDesa) && !drawMode && (

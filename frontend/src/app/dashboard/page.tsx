@@ -15,6 +15,8 @@ function getProp(props: any, key: string): string | null {
   return found ? String(props[found]) : null;
 }
 
+import { calculatePFI, calculateHHI, getPFICategory, getPFIColor } from '@/utils/pfi';
+
 export default function Dashboard() {
   const [geoData, setGeoData] = useState<any>(null);
   const [flyToFeature, setFlyToFeature] = useState<any>(null);
@@ -44,6 +46,10 @@ export default function Dashboard() {
   // ─── Party Insight States ──────────────────────────────────────────────
   const [selectedParty, setSelectedParty] = useState<string | null>(null);
   const [partyFilter, setPartyFilter] = useState<'above50' | 'below50' | null>(null);
+
+  // ─── PFI States ────────────────────────────────────────────────────────
+  const [pfiOpen, setPfiOpen] = useState(false);
+  const [isPFIMode, setIsPFIMode] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const router = useRouter();
@@ -275,6 +281,59 @@ export default function Dashboard() {
     });
     return result;
   }, [selectedParty, selectedPemilu, selectedElection, geoData, selectedKec, highlightedDesa]);
+
+  // ─── Per-Desa PFI Scores for map heatmap ──────────────────────────────────
+  const pfiDesaScores = useMemo(() => {
+    if (!isPFIMode || !selectedPemilu || !selectedElection || !geoData?.features) return {};
+
+    const result: Record<string, number> = {};
+    geoData.features.forEach((f: any) => {
+      const desa = getProp(f.properties, 'desa');
+      const kec = getProp(f.properties, 'kecamatan');
+      if (!desa || !kec) return;
+
+      // Scope filter: hanya hitung desa sesuai pilihan aktif
+      if (highlightedDesa && selectedKec && selectedKec !== 'ALL') {
+        if (desa !== highlightedDesa || kec !== selectedKec) return;
+      } else if (selectedKec && selectedKec !== 'ALL') {
+        if (kec !== selectedKec) return;
+      }
+
+      const pemiluData = f.properties[selectedPemilu];
+      if (!pemiluData) return;
+      const electionData = pemiluData[selectedElection] || pemiluData[selectedElection?.toUpperCase?.()];
+      if (!electionData || !electionData.calon) return;
+
+      const votes = Object.values(electionData.calon).map(v => Number(v) || 0);
+      result[`${desa}__${kec}`] = calculatePFI(votes);
+    });
+    return result;
+  }, [isPFIMode, selectedPemilu, selectedElection, geoData, selectedKec, highlightedDesa]);
+
+  // ─── Overall PFI for currently selected region ───────────────────────────
+  const aggregatedPfi = useMemo(() => {
+    if (!isPFIMode || !aggregatedData) return null;
+    const votes = aggregatedData.sortedCalon.map(c => c[1]);
+    const score = calculatePFI(votes);
+    const hhi = calculateHHI(votes);
+    
+    // Sort desas by PFI for ranking if we have multiple desas
+    let sortedDesas: [string, number][] = [];
+    if (!highlightedDesa) {
+       sortedDesas = Object.entries(pfiDesaScores)
+        .filter(([, s]) => s >= 0)
+        .sort((a, b) => b[1] - a[1]);
+    }
+
+    return {
+      score,
+      hhi,
+      category: getPFICategory(score),
+      color: getPFIColor(score),
+      topFragmented: sortedDesas.slice(0, 10),
+      topDominant: [...sortedDesas].reverse().slice(0, 10)
+    };
+  }, [isPFIMode, aggregatedData, pfiDesaScores, highlightedDesa]);
 
   // Toggle party selection; reset filter when switching party
   const handlePartyClick = useCallback((partyName: string) => {
@@ -598,11 +657,42 @@ export default function Dashboard() {
                   {['PPWP', 'DPD', 'DPR RI', 'DPRD PROVINSI', 'DPRD KABUPATEN'].map(election => (
                     <button
                       key={election}
-                      onClick={() => { setSelectedPemilu('pemilu_2024'); setSelectedElection(election as any); }}
+                      onClick={() => { setSelectedPemilu('pemilu_2024'); setSelectedElection(election as any); setIsPFIMode(false); }}
                       className={`w-full text-left px-3 py-1.5 rounded text-xs transition-all ${
-                        selectedPemilu === 'pemilu_2024' && selectedElection === election
+                        selectedPemilu === 'pemilu_2024' && selectedElection === election && !isPFIMode
                           ? 'bg-blue-600/20 text-blue-300 border border-blue-500/30'
                           : 'text-slate-400 hover:bg-slate-800 hover:text-blue-300'
+                      }`}
+                    >
+                      {election}
+                    </button>
+                  ))}
+                </div>
+              )}
+              {/* Political Fragmentation Index (PFI) */}
+              <button
+                onClick={() => setPfiOpen(!pfiOpen)}
+                className="w-full flex items-center gap-2 px-3 py-2 rounded-md text-slate-300 hover:bg-slate-800 hover:text-white transition-all text-sm"
+              >
+                <span className="flex-1 text-left font-medium">Political Fragmentation Index</span>
+                {pfiOpen ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+              </button>
+              {pfiOpen && (
+                <div className="ml-2 space-y-0.5">
+                  {['PPWP', 'DPD', 'DPR RI', 'DPRD PROVINSI', 'DPRD KABUPATEN'].map(election => (
+                    <button
+                      key={election}
+                      onClick={() => { 
+                        setSelectedPemilu('pemilu_2024'); 
+                        setSelectedElection(election as any); 
+                        setIsPFIMode(true);
+                        setSelectedParty(null);
+                        setPartyFilter(null);
+                      }}
+                      className={`w-full text-left px-3 py-1.5 rounded text-xs transition-all ${
+                        selectedPemilu === 'pemilu_2024' && selectedElection === election && isPFIMode
+                          ? 'bg-purple-600/20 text-purple-300 border border-purple-500/30'
+                          : 'text-slate-400 hover:bg-slate-800 hover:text-purple-300'
                       }`}
                     >
                       {election}
@@ -623,7 +713,7 @@ export default function Dashboard() {
                   {['PPWP', 'DPD', 'DPR RI', 'DPRD PROVINSI', 'DPRD KABUPATEN'].map(election => (
                     <button
                       key={election}
-                      onClick={() => { setSelectedPemilu('pemilu_2019'); setSelectedElection(election as any); }}
+                      onClick={() => { setSelectedPemilu('pemilu_2019'); setSelectedElection(election as any); setIsPFIMode(false); }}
                       className={`w-full text-left px-3 py-1.5 rounded text-xs transition-all ${
                         selectedPemilu === 'pemilu_2019' && selectedElection === election
                           ? 'bg-blue-600/20 text-blue-300 border border-blue-500/30'
@@ -675,14 +765,18 @@ export default function Dashboard() {
             partyFilter={partyFilter}
             partyDesaPercentages={partyDesaPercentages}
             onPartyFilterChange={setPartyFilter}
+            isPFIMode={isPFIMode}
+            pfiDesaScores={pfiDesaScores}
           />
           
           {/* ── Floating Spatial Analysis Panel ── */}
           {aggregatedData && (
             <div className="absolute top-4 right-4 w-80 bg-slate-900/95 backdrop-blur-md rounded-xl border border-slate-700 shadow-2xl p-4 flex flex-col max-h-[85vh] overflow-hidden text-slate-200 z-10">
               <div className="flex items-center justify-between mb-3 border-b border-slate-700 pb-2">
-                <h3 className="font-bold text-lg text-blue-400">Analisis {selectedPemilu === 'pemilu_2024' ? '2024' : '2019'} - {selectedElection}</h3>
-                <button onClick={() => { setSelectedElection(null); setSelectedParty(null); setPartyFilter(null); }} className="text-slate-400 hover:text-white transition-colors">&times;</button>
+                <h3 className="font-bold text-lg text-blue-400">
+                  {isPFIMode ? 'Fragmentasi (PFI)' : 'Analisis'} - {selectedElection}
+                </h3>
+                <button onClick={() => { setSelectedElection(null); setSelectedParty(null); setPartyFilter(null); setIsPFIMode(false); }} className="text-slate-400 hover:text-white transition-colors">&times;</button>
               </div>
               
               <div className="text-sm mb-4">
@@ -697,50 +791,114 @@ export default function Dashboard() {
                 </div>
               </div>
               
-              <h4 className="font-semibold text-sm mb-2 text-slate-300 border-b border-slate-700 pb-2">
-                Perolehan Suara Calon
-                {selectedParty && <span className="text-xs text-blue-400 ml-2 font-normal">({selectedParty} dipilih)</span>}
-              </h4>
-              <p className="text-xs text-slate-500 italic mb-2">Klik kartu untuk highlight di peta</p>
-              <div className="flex-1 overflow-y-auto space-y-2.5 pr-1 scrollbar-thin scrollbar-thumb-slate-600 scrollbar-track-transparent">
-                {aggregatedData.sortedCalon.map(([nama, suara]: [string, number], idx: number) => {
-                  const pct = aggregatedData.total_suara_sah > 0 ? (suara / aggregatedData.total_suara_sah) * 100 : 0;
-                  const isSelected = selectedParty === nama;
-                  return (
-                    <button
-                      key={idx}
-                      onClick={() => handlePartyClick(nama)}
-                      className={`w-full text-left rounded p-2.5 border transition-all duration-200 ${
-                        isSelected
-                          ? 'bg-blue-600/25 border-blue-400/60 ring-1 ring-blue-400/40 shadow-lg shadow-blue-900/20'
-                          : 'bg-slate-800/40 border-slate-700/50 hover:bg-slate-700/60 hover:border-slate-500/60'
-                      }`}
-                    >
-                      <div className="flex justify-between text-xs mb-1.5">
-                        <span className={`font-medium pr-2 ${isSelected ? 'text-blue-200' : 'text-slate-200'}`}>
-                          {isSelected && <span className="mr-1">📍</span>}{nama}
-                        </span>
-                        <span className="font-bold text-blue-300">
-                          {suara.toLocaleString('id-ID')}
-                          <span className="text-slate-400 font-normal ml-1">
-                            ({pct.toFixed(1)}%)
-                          </span>
-                        </span>
+              {isPFIMode && aggregatedPfi ? (
+                <div className="flex-1 overflow-y-auto pr-1 scrollbar-thin scrollbar-thumb-slate-600 scrollbar-track-transparent">
+                  {aggregatedPfi.score < 0 ? (
+                    <div className="p-4 bg-slate-800/60 border border-slate-700/50 rounded-lg text-center">
+                      <p className="text-sm text-slate-400">Data tidak cukup untuk menghitung PFI di wilayah ini.</p>
+                    </div>
+                  ) : (
+                    <>
+                      <div className="bg-slate-800/40 border border-slate-700/50 rounded-lg p-3 mb-4 text-center shadow-inner">
+                        <p className="text-xs text-slate-400 uppercase tracking-wider mb-1">Skor PFI</p>
+                        <p className="text-4xl font-bold mb-1" style={{ color: aggregatedPfi.color }}>
+                          {aggregatedPfi.score.toFixed(1)}
+                        </p>
+                        <div 
+                          className="text-xs font-semibold px-2 py-1 rounded-full inline-block mt-1"
+                          style={{ backgroundColor: `${aggregatedPfi.color}20`, color: aggregatedPfi.color, border: `1px solid ${aggregatedPfi.color}40` }}
+                        >
+                          {aggregatedPfi.category}
+                        </div>
+                        <p className="text-xs text-slate-500 mt-3 pt-2 border-t border-slate-700/50">
+                          HHI: {aggregatedPfi.hhi.toFixed(4)} &bull; {aggregatedData.sortedCalon.length} Calon
+                        </p>
                       </div>
-                      {/* Progress Bar */}
-                      <div className="w-full bg-slate-900 rounded-full h-1.5 ring-1 ring-slate-700/50">
-                        <div
-                          className={`h-1.5 rounded-full ${isSelected ? 'bg-gradient-to-r from-blue-400 to-cyan-300' : 'bg-gradient-to-r from-blue-500 to-cyan-400'}`}
-                          style={{ width: `${pct}%` }}
-                        />
-                      </div>
-                    </button>
-                  );
-                })}
-                {aggregatedData.sortedCalon.length === 0 && (
-                  <p className="text-xs text-slate-500 italic text-center py-6">Data tidak tersedia untuk wilayah ini.</p>
-                )}
-              </div>
+
+                      {!highlightedDesa && aggregatedPfi.topFragmented.length > 0 && (
+                        <div className="mb-4">
+                          <h4 className="font-semibold text-xs text-slate-300 mb-2 uppercase tracking-wide">Desa Paling Cair (Fragmentasi Tinggi)</h4>
+                          <div className="space-y-1.5">
+                            {aggregatedPfi.topFragmented.slice(0, 5).map(([id, score], idx) => {
+                              const [desa] = id.split('__');
+                              return (
+                                <div key={idx} className="flex justify-between items-center text-xs bg-slate-800/30 p-1.5 rounded">
+                                  <span className="text-slate-300 truncate pr-2">{idx + 1}. {desa}</span>
+                                  <span className="font-mono font-medium" style={{ color: getPFIColor(score) }}>{score.toFixed(1)}</span>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      )}
+
+                      {!highlightedDesa && aggregatedPfi.topDominant.length > 0 && (
+                        <div className="mb-4">
+                          <h4 className="font-semibold text-xs text-slate-300 mb-2 uppercase tracking-wide">Desa Paling Stabil (Dominan)</h4>
+                          <div className="space-y-1.5">
+                            {aggregatedPfi.topDominant.slice(0, 5).map(([id, score], idx) => {
+                              const [desa] = id.split('__');
+                              return (
+                                <div key={idx} className="flex justify-between items-center text-xs bg-slate-800/30 p-1.5 rounded">
+                                  <span className="text-slate-300 truncate pr-2">{idx + 1}. {desa}</span>
+                                  <span className="font-mono font-medium" style={{ color: getPFIColor(score) }}>{score.toFixed(1)}</span>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      )}
+                    </>
+                  )}
+                </div>
+              ) : (
+                <>
+                  <h4 className="font-semibold text-sm mb-2 text-slate-300 border-b border-slate-700 pb-2">
+                    Perolehan Suara Calon
+                    {selectedParty && <span className="text-xs text-blue-400 ml-2 font-normal">({selectedParty} dipilih)</span>}
+                  </h4>
+                  <p className="text-xs text-slate-500 italic mb-2">Klik kartu untuk highlight di peta</p>
+                  <div className="flex-1 overflow-y-auto space-y-2.5 pr-1 scrollbar-thin scrollbar-thumb-slate-600 scrollbar-track-transparent">
+                    {aggregatedData.sortedCalon.map(([nama, suara]: [string, number], idx: number) => {
+                      const pct = aggregatedData.total_suara_sah > 0 ? (suara / aggregatedData.total_suara_sah) * 100 : 0;
+                      const isSelected = selectedParty === nama;
+                      return (
+                        <button
+                          key={idx}
+                          onClick={() => handlePartyClick(nama)}
+                          className={`w-full text-left rounded p-2.5 border transition-all duration-200 ${
+                            isSelected
+                              ? 'bg-blue-600/25 border-blue-400/60 ring-1 ring-blue-400/40 shadow-lg shadow-blue-900/20'
+                              : 'bg-slate-800/40 border-slate-700/50 hover:bg-slate-700/60 hover:border-slate-500/60'
+                          }`}
+                        >
+                          <div className="flex justify-between text-xs mb-1.5">
+                            <span className={`font-medium pr-2 ${isSelected ? 'text-blue-200' : 'text-slate-200'}`}>
+                              {isSelected && <span className="mr-1">📍</span>}{nama}
+                            </span>
+                            <span className="font-bold text-blue-300">
+                              {suara.toLocaleString('id-ID')}
+                              <span className="text-slate-400 font-normal ml-1">
+                                ({pct.toFixed(1)}%)
+                              </span>
+                            </span>
+                          </div>
+                          {/* Progress Bar */}
+                          <div className="w-full bg-slate-900 rounded-full h-1.5 ring-1 ring-slate-700/50">
+                            <div
+                              className={`h-1.5 rounded-full ${isSelected ? 'bg-gradient-to-r from-blue-400 to-cyan-300' : 'bg-gradient-to-r from-blue-500 to-cyan-400'}`}
+                              style={{ width: `${pct}%` }}
+                            />
+                          </div>
+                        </button>
+                      );
+                    })}
+                    {aggregatedData.sortedCalon.length === 0 && (
+                      <p className="text-xs text-slate-500 italic text-center py-6">Data tidak tersedia untuk wilayah ini.</p>
+                    )}
+                  </div>
+                </>
+              )}
             </div>
           )}
         </div>
