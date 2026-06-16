@@ -4,7 +4,7 @@ import { useRouter } from 'next/navigation';
 import MapViewer from '@/components/MapViewer';
 import {
   Layers, Database, Activity, Share2, UploadCloud,
-  LogOut, ChevronDown, ChevronRight, MapPin, Map, Download, PenLine, AlertTriangle
+  LogOut, ChevronDown, ChevronRight, MapPin, Map, Download, PenLine, AlertTriangle, Trash2
 } from 'lucide-react';
 import * as turf from '@turf/turf';
 
@@ -52,26 +52,52 @@ export default function Dashboard() {
   const [isPFIMode, setIsPFIMode] = useState(false);
   const [pfiClickedDesa, setPfiClickedDesa] = useState<{ desa: string; kec: string } | null>(null);
 
+  const [activeLayerIds, setActiveLayerIds] = useState<string[]>([]);
+
   const fileInputRef = useRef<HTMLInputElement>(null);
   const router = useRouter();
 
   // ─── Load last active layer on mount ───────────────────────────────────
   useEffect(() => {
-    const layerId = localStorage.getItem('active_layer_id');
-    if (layerId) fetchLayer(layerId);
+    let storedIds: string[] = [];
+    const multiIds = localStorage.getItem('active_layer_ids');
+    const singleId = localStorage.getItem('active_layer_id');
+    
+    if (multiIds) {
+      try {
+        storedIds = JSON.parse(multiIds);
+      } catch (e) {
+        console.error('Gagal parsing active_layer_ids', e);
+      }
+    } else if (singleId) {
+      storedIds = [singleId];
+      localStorage.setItem('active_layer_ids', JSON.stringify(storedIds));
+      localStorage.removeItem('active_layer_id');
+    }
+
+    if (storedIds.length > 0) {
+      setActiveLayerIds(storedIds);
+      fetchAllLayers(storedIds);
+    }
   }, []);
 
   const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
 
-  const fetchLayer = async (layerId: string) => {
+  const fetchAllLayers = async (layerIds: string[]) => {
     try {
-      const res = await fetch(`${API_URL}/geojson/layer/${layerId}`);
-      if (res.ok) {
-        const json = await res.json();
-        setGeoData(json);
+      let allFeatures: any[] = [];
+      for (const id of layerIds) {
+        const res = await fetch(`${API_URL}/geojson/layer/${id}`);
+        if (res.ok) {
+          const json = await res.json();
+          if (json.features) {
+            allFeatures = [...allFeatures, ...json.features];
+          }
+        }
       }
+      setGeoData({ type: 'FeatureCollection', features: allFeatures });
     } catch (e) {
-      console.error('Gagal mengambil layer', e);
+      console.error('Gagal mengambil layers', e);
     }
   };
 
@@ -101,6 +127,7 @@ export default function Dashboard() {
         document.cookie = 'auth_token=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;';
         localStorage.removeItem('token');
         localStorage.removeItem('active_layer_id');
+        localStorage.removeItem('active_layer_ids');
         alert('Sesi login Anda telah habis. Silakan login kembali.');
         router.push('/login');
         return;
@@ -114,13 +141,16 @@ export default function Dashboard() {
         throw new Error(msg);
       }
 
-      // Sukses — simpan layer ID dan tampilkan di peta
-      localStorage.setItem('active_layer_id', data.layerId);
+      // Sukses — tambahkan layer ID baru dan tampilkan di peta
+      const newIds = [...activeLayerIds, data.layerId];
+      setActiveLayerIds(newIds);
+      localStorage.setItem('active_layer_ids', JSON.stringify(newIds));
+      
       // Reset state kecamatan/desa lama sebelum load data baru
       setSelectedKec(null);
       setHighlightedKec(null);
       setHighlightedDesa(null);
-      fetchLayer(data.layerId);
+      fetchAllLayers(newIds);
 
     } catch (err: any) {
       alert(`Error: ${err.message}`);
@@ -133,7 +163,20 @@ export default function Dashboard() {
     document.cookie = 'auth_token=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;';
     localStorage.removeItem('token');
     localStorage.removeItem('active_layer_id');
+    localStorage.removeItem('active_layer_ids');
     router.push('/login');
+  };
+
+  const handleClearData = () => {
+    if (confirm('Apakah Anda yakin ingin menghapus semua layer dari tampilan peta?')) {
+      setActiveLayerIds([]);
+      setGeoData(null);
+      localStorage.removeItem('active_layer_ids');
+      localStorage.removeItem('active_layer_id');
+      setSelectedKec(null);
+      setHighlightedKec(null);
+      setHighlightedDesa(null);
+    }
   };
 
   // ─── Derive daftar Kecamatan & Desa dari geoData ───────────────────────
@@ -666,6 +709,9 @@ export default function Dashboard() {
 
           {/* ── Menu lain ── */}
           <SidebarItem icon={<UploadCloud size={20} />} label="Import Data" onClick={() => fileInputRef.current?.click()} />
+          {activeLayerIds.length > 0 && (
+            <SidebarItem icon={<Trash2 size={20} />} label="Clear Data" onClick={handleClearData} />
+          )}
           
           {/* ── Spatial Analysis (collapsible) ── */}
           <button
