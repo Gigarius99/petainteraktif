@@ -48,7 +48,6 @@ export default function Dashboard() {
   const [partyFilter, setPartyFilter] = useState<'above50' | 'below50' | null>(null);
 
   // ─── PFI States ────────────────────────────────────────────────────────
-  const [pfiOpen, setPfiOpen] = useState(false);
   const [isPFIMode, setIsPFIMode] = useState(false);
   const [pfiClickedDesa, setPfiClickedDesa] = useState<{ desa: string; kec: string } | null>(null);
 
@@ -739,9 +738,10 @@ export default function Dashboard() {
               </button>
               {pemilu2024Open && (
                 <div className="ml-2 space-y-0.5">
+                  <div className="px-3 py-1 text-[10px] font-bold text-slate-500 uppercase tracking-wider">Persebaran Suara</div>
                   {['PPWP', 'DPD', 'DPR RI', 'DPRD PROVINSI', 'DPRD KABUPATEN'].map(election => (
                     <button
-                      key={election}
+                      key={`suara_2024_${election}`}
                       onClick={() => { setSelectedPemilu('pemilu_2024'); setSelectedElection(election as any); setIsPFIMode(false); }}
                       className={`w-full text-left px-3 py-1.5 rounded text-xs transition-all ${
                         selectedPemilu === 'pemilu_2024' && selectedElection === election && !isPFIMode
@@ -752,21 +752,10 @@ export default function Dashboard() {
                       {election}
                     </button>
                   ))}
-                </div>
-              )}
-              {/* Political Fragmentation Index (PFI) */}
-              <button
-                onClick={() => setPfiOpen(!pfiOpen)}
-                className="w-full flex items-center gap-2 px-3 py-2 rounded-md text-slate-300 hover:bg-slate-800 hover:text-white transition-all text-sm"
-              >
-                <span className="flex-1 text-left font-medium">Political Fragmentation Index</span>
-                {pfiOpen ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
-              </button>
-              {pfiOpen && (
-                <div className="ml-2 space-y-0.5">
+                  <div className="px-3 py-1 mt-1 text-[10px] font-bold text-slate-500 uppercase tracking-wider">Fragmentation Index</div>
                   {['PPWP', 'DPD', 'DPR RI', 'DPRD PROVINSI', 'DPRD KABUPATEN'].map(election => (
                     <button
-                      key={election}
+                      key={`pfi_2024_${election}`}
                       onClick={() => { 
                         setSelectedPemilu('pemilu_2024'); 
                         setSelectedElection(election as any); 
@@ -780,7 +769,7 @@ export default function Dashboard() {
                           : 'text-slate-400 hover:bg-slate-800 hover:text-purple-300'
                       }`}
                     >
-                      {election}
+                      PFI {election}
                     </button>
                   ))}
                 </div>
@@ -795,17 +784,38 @@ export default function Dashboard() {
               </button>
               {pemilu2019Open && (
                 <div className="ml-2 space-y-0.5">
+                  <div className="px-3 py-1 text-[10px] font-bold text-slate-500 uppercase tracking-wider">Persebaran Suara</div>
                   {['PPWP', 'DPD', 'DPR RI', 'DPRD PROVINSI', 'DPRD KABUPATEN'].map(election => (
                     <button
-                      key={election}
+                      key={`suara_2019_${election}`}
                       onClick={() => { setSelectedPemilu('pemilu_2019'); setSelectedElection(election as any); setIsPFIMode(false); }}
                       className={`w-full text-left px-3 py-1.5 rounded text-xs transition-all ${
-                        selectedPemilu === 'pemilu_2019' && selectedElection === election
+                        selectedPemilu === 'pemilu_2019' && selectedElection === election && !isPFIMode
                           ? 'bg-blue-600/20 text-blue-300 border border-blue-500/30'
                           : 'text-slate-400 hover:bg-slate-800 hover:text-blue-300'
                       }`}
                     >
                       {election}
+                    </button>
+                  ))}
+                  <div className="px-3 py-1 mt-1 text-[10px] font-bold text-slate-500 uppercase tracking-wider">Fragmentation Index</div>
+                  {['PPWP', 'DPD', 'DPR RI', 'DPRD PROVINSI', 'DPRD KABUPATEN'].map(election => (
+                    <button
+                      key={`pfi_2019_${election}`}
+                      onClick={() => { 
+                        setSelectedPemilu('pemilu_2019'); 
+                        setSelectedElection(election as any); 
+                        setIsPFIMode(true);
+                        setSelectedParty(null);
+                        setPartyFilter(null);
+                      }}
+                      className={`w-full text-left px-3 py-1.5 rounded text-xs transition-all ${
+                        selectedPemilu === 'pemilu_2019' && selectedElection === election && isPFIMode
+                          ? 'bg-purple-600/20 text-purple-300 border border-purple-500/30'
+                          : 'text-slate-400 hover:bg-slate-800 hover:text-purple-300'
+                      }`}
+                    >
+                      PFI {election}
                     </button>
                   ))}
                 </div>
