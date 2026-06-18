@@ -29,8 +29,9 @@ export default function Dashboard() {
 
   // New states for Spatial Analysis
   const [analysisOpen, setAnalysisOpen] = useState(false);
-  const [pemilu2024Open, setPemilu2024Open] = useState(false);
-  const [pemilu2019Open, setPemilu2019Open] = useState(false);
+  const [perolehanOpen, setPerolehanOpen] = useState(false);
+  const [perolehan2024Open, setPerolehan2024Open] = useState(false);
+  const [perolehan2019Open, setPerolehan2019Open] = useState(false);
   const [pfiMenuOpen, setPfiMenuOpen] = useState(false);
   const [pfi2024Open, setPfi2024Open] = useState(false);
   const [pfi2019Open, setPfi2019Open] = useState(false);
@@ -731,55 +732,66 @@ export default function Dashboard() {
 
           {analysisOpen && (
             <div className="ml-3 border-l border-slate-700 pl-2 space-y-1">
-              {/* Pemilu 2024 – hanya persebaran suara */}
+              {/* Perolehan Suara – gabungan Pemilu 2024 & 2019 */}
               <button
-                onClick={() => setPemilu2024Open(!pemilu2024Open)}
+                onClick={() => setPerolehanOpen(!perolehanOpen)}
                 className="w-full flex items-center gap-2 px-3 py-2 rounded-md text-slate-300 hover:bg-slate-800 hover:text-white transition-all text-sm"
               >
-                <span className="flex-1 text-left font-medium">Pemilu 2024</span>
-                {pemilu2024Open ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+                <span className="flex-1 text-left font-medium">Perolehan Suara</span>
+                {perolehanOpen ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
               </button>
-              {pemilu2024Open && (
+              {perolehanOpen && (
                 <div className="ml-2 space-y-0.5">
-                  {['PPWP', 'DPD', 'DPR RI', 'DPRD PROVINSI', 'DPRD KABUPATEN'].map(election => (
-                    <button
-                      key={`suara_2024_${election}`}
-                      onClick={() => { setSelectedPemilu('pemilu_2024'); setSelectedElection(election as any); setIsPFIMode(false); }}
-                      className={`w-full text-left px-3 py-1.5 rounded text-xs transition-all ${
-                        selectedPemilu === 'pemilu_2024' && selectedElection === election && !isPFIMode
-                          ? 'bg-blue-600/20 text-blue-300 border border-blue-500/30'
-                          : 'text-slate-400 hover:bg-slate-800 hover:text-blue-300'
-                      }`}
-                    >
-                      {election}
-                    </button>
-                  ))}
-                </div>
-              )}
-
-              {/* Pemilu 2019 – hanya persebaran suara */}
-              <button
-                onClick={() => setPemilu2019Open(!pemilu2019Open)}
-                className="w-full flex items-center gap-2 px-3 py-2 rounded-md text-slate-300 hover:bg-slate-800 hover:text-white transition-all text-sm"
-              >
-                <span className="flex-1 text-left font-medium">Pemilu 2019</span>
-                {pemilu2019Open ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
-              </button>
-              {pemilu2019Open && (
-                <div className="ml-2 space-y-0.5">
-                  {['PPWP', 'DPD', 'DPR RI', 'DPRD PROVINSI', 'DPRD KABUPATEN'].map(election => (
-                    <button
-                      key={`suara_2019_${election}`}
-                      onClick={() => { setSelectedPemilu('pemilu_2019'); setSelectedElection(election as any); setIsPFIMode(false); }}
-                      className={`w-full text-left px-3 py-1.5 rounded text-xs transition-all ${
-                        selectedPemilu === 'pemilu_2019' && selectedElection === election && !isPFIMode
-                          ? 'bg-blue-600/20 text-blue-300 border border-blue-500/30'
-                          : 'text-slate-400 hover:bg-slate-800 hover:text-blue-300'
-                      }`}
-                    >
-                      {election}
-                    </button>
-                  ))}
+                  {/* Submenu Pemilu 2024 */}
+                  <button
+                    onClick={() => setPerolehan2024Open(!perolehan2024Open)}
+                    className="w-full flex items-center gap-2 px-3 py-1.5 rounded-md text-slate-400 hover:bg-slate-800 hover:text-white transition-all text-xs"
+                  >
+                    <span className="flex-1 text-left font-medium">Pemilu 2024</span>
+                    {perolehan2024Open ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
+                  </button>
+                  {perolehan2024Open && (
+                    <div className="ml-2 space-y-0.5">
+                      {['PPWP', 'DPD', 'DPR RI', 'DPRD PROVINSI', 'DPRD KABUPATEN'].map(election => (
+                        <button
+                          key={`suara_2024_${election}`}
+                          onClick={() => { setSelectedPemilu('pemilu_2024'); setSelectedElection(election as any); setIsPFIMode(false); }}
+                          className={`w-full text-left px-3 py-1.5 rounded text-xs transition-all ${
+                            selectedPemilu === 'pemilu_2024' && selectedElection === election && !isPFIMode
+                              ? 'bg-blue-600/20 text-blue-300 border border-blue-500/30'
+                              : 'text-slate-400 hover:bg-slate-800 hover:text-blue-300'
+                          }`}
+                        >
+                          {election}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                  {/* Submenu Pemilu 2019 */}
+                  <button
+                    onClick={() => setPerolehan2019Open(!perolehan2019Open)}
+                    className="w-full flex items-center gap-2 px-3 py-1.5 rounded-md text-slate-400 hover:bg-slate-800 hover:text-white transition-all text-xs"
+                  >
+                    <span className="flex-1 text-left font-medium">Pemilu 2019</span>
+                    {perolehan2019Open ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
+                  </button>
+                  {perolehan2019Open && (
+                    <div className="ml-2 space-y-0.5">
+                      {['PPWP', 'DPD', 'DPR RI', 'DPRD PROVINSI', 'DPRD KABUPATEN'].map(election => (
+                        <button
+                          key={`suara_2019_${election}`}
+                          onClick={() => { setSelectedPemilu('pemilu_2019'); setSelectedElection(election as any); setIsPFIMode(false); }}
+                          className={`w-full text-left px-3 py-1.5 rounded text-xs transition-all ${
+                            selectedPemilu === 'pemilu_2019' && selectedElection === election && !isPFIMode
+                              ? 'bg-blue-600/20 text-blue-300 border border-blue-500/30'
+                              : 'text-slate-400 hover:bg-slate-800 hover:text-blue-300'
+                          }`}
+                        >
+                          {election}
+                        </button>
+                      ))}
+                    </div>
+                  )}
                 </div>
               )}
 
