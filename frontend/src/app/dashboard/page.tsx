@@ -55,32 +55,41 @@ export default function Dashboard() {
   const [isPFIMode, setIsPFIMode] = useState(false);
   const [pfiClickedDesa, setPfiClickedDesa] = useState<{ desa: string; kec: string } | null>(null);
 
-  const [activeLayerIds, setActiveLayerIds] = useState<string[]>([]);
+  // ─── Uploaded Layers State ─────────────────────────────────────────────
+  interface LayerEntry { id: string; name: string; }
+  const [uploadedLayers, setUploadedLayers] = useState<LayerEntry[]>([]);
+  const [kelolaDataOpen, setKelolaDataOpen] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const router = useRouter();
 
-  // ─── Load last active layer on mount ───────────────────────────────────
+  // ─── Load last active layers on mount ─────────────────────────────────
   useEffect(() => {
-    let storedIds: string[] = [];
-    const multiIds = localStorage.getItem('active_layer_ids');
-    const singleId = localStorage.getItem('active_layer_id');
-    
-    if (multiIds) {
+    let storedLayers: LayerEntry[] = [];
+    const multiRaw = localStorage.getItem('active_layer_entries');
+    const legacyMultiIds = localStorage.getItem('active_layer_ids');
+    const legacySingleId = localStorage.getItem('active_layer_id');
+
+    if (multiRaw) {
+      try { storedLayers = JSON.parse(multiRaw); } catch (e) { console.error('Gagal parsing active_layer_entries', e); }
+    } else if (legacyMultiIds) {
+      // Migrate from old format
       try {
-        storedIds = JSON.parse(multiIds);
-      } catch (e) {
-        console.error('Gagal parsing active_layer_ids', e);
-      }
-    } else if (singleId) {
-      storedIds = [singleId];
-      localStorage.setItem('active_layer_ids', JSON.stringify(storedIds));
+        const ids: string[] = JSON.parse(legacyMultiIds);
+        storedLayers = ids.map((id, i) => ({ id, name: `Layer ${i + 1}` }));
+        localStorage.setItem('active_layer_entries', JSON.stringify(storedLayers));
+        localStorage.removeItem('active_layer_ids');
+        localStorage.removeItem('active_layer_id');
+      } catch (e) { console.error('Gagal migrasi legacy ids', e); }
+    } else if (legacySingleId) {
+      storedLayers = [{ id: legacySingleId, name: 'Layer 1' }];
+      localStorage.setItem('active_layer_entries', JSON.stringify(storedLayers));
       localStorage.removeItem('active_layer_id');
     }
 
-    if (storedIds.length > 0) {
-      setActiveLayerIds(storedIds);
-      fetchAllLayers(storedIds);
+    if (storedLayers.length > 0) {
+      setUploadedLayers(storedLayers);
+      fetchAllLayers(storedLayers.map(l => l.id));
     }
   }, []);
 
@@ -131,6 +140,7 @@ export default function Dashboard() {
         localStorage.removeItem('token');
         localStorage.removeItem('active_layer_id');
         localStorage.removeItem('active_layer_ids');
+        localStorage.removeItem('active_layer_entries');
         alert('Sesi login Anda telah habis. Silakan login kembali.');
         router.push('/login');
         return;
@@ -144,16 +154,17 @@ export default function Dashboard() {
         throw new Error(msg);
       }
 
-      // Sukses — tambahkan layer ID baru dan tampilkan di peta
-      const newIds = [...activeLayerIds, data.layerId];
-      setActiveLayerIds(newIds);
-      localStorage.setItem('active_layer_ids', JSON.stringify(newIds));
-      
+      // Sukses — tambahkan layer entry baru (id + nama file)
+      const newEntry: LayerEntry = { id: data.layerId, name: file.name };
+      const newLayers = [...uploadedLayers, newEntry];
+      setUploadedLayers(newLayers);
+      localStorage.setItem('active_layer_entries', JSON.stringify(newLayers));
+
       // Reset state kecamatan/desa lama sebelum load data baru
       setSelectedKec(null);
       setHighlightedKec(null);
       setHighlightedDesa(null);
-      fetchAllLayers(newIds);
+      fetchAllLayers(newLayers.map(l => l.id));
 
     } catch (err: any) {
       alert(`Error: ${err.message}`);
@@ -162,18 +173,34 @@ export default function Dashboard() {
     e.target.value = '';
   };
 
+  const handleRemoveLayer = (layerId: string) => {
+    const newLayers = uploadedLayers.filter(l => l.id !== layerId);
+    setUploadedLayers(newLayers);
+    localStorage.setItem('active_layer_entries', JSON.stringify(newLayers));
+    setSelectedKec(null);
+    setHighlightedKec(null);
+    setHighlightedDesa(null);
+    if (newLayers.length > 0) {
+      fetchAllLayers(newLayers.map(l => l.id));
+    } else {
+      setGeoData(null);
+    }
+  };
+
   const handleLogout = () => {
     document.cookie = 'auth_token=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;';
     localStorage.removeItem('token');
     localStorage.removeItem('active_layer_id');
     localStorage.removeItem('active_layer_ids');
+    localStorage.removeItem('active_layer_entries');
     router.push('/login');
   };
 
   const handleClearData = () => {
     if (confirm('Apakah Anda yakin ingin menghapus semua layer dari tampilan peta?')) {
-      setActiveLayerIds([]);
+      setUploadedLayers([]);
       setGeoData(null);
+      localStorage.removeItem('active_layer_entries');
       localStorage.removeItem('active_layer_ids');
       localStorage.removeItem('active_layer_id');
       setSelectedKec(null);
@@ -557,7 +584,7 @@ export default function Dashboard() {
 
         {/* Nav */}
         <nav className="flex-1 w-full px-3 space-y-1 overflow-y-auto scrollbar-thin scrollbar-track-slate-900 scrollbar-thumb-slate-700">
-          <input type="file" accept=".geojson,.json" className="hidden" ref={fileInputRef} onChange={handleFileUpload} />
+
 
           {/* ── Layer Manager (collapsible) ── */}
           <button
@@ -710,10 +737,63 @@ export default function Dashboard() {
             </>
           )}
 
-          {/* ── Menu lain ── */}
+          {/* ── Import & Kelola Data ── */}
+          <input type="file" accept=".geojson,.json" className="hidden" ref={fileInputRef} onChange={handleFileUpload} />
           <SidebarItem icon={<UploadCloud size={20} />} label="Import Data" onClick={() => fileInputRef.current?.click()} />
-          {activeLayerIds.length > 0 && (
-            <SidebarItem icon={<Trash2 size={20} />} label="Clear Data" onClick={handleClearData} />
+
+          {/* Kelola Data – daftar file yang sudah terupload */}
+          {uploadedLayers.length > 0 && (
+            <>
+              <button
+                onClick={() => setKelolaDataOpen(!kelolaDataOpen)}
+                className={`w-full flex items-center gap-3 p-3 px-4 rounded-lg transition-all duration-200 group ${
+                  kelolaDataOpen
+                    ? 'bg-emerald-600/10 text-emerald-400 border border-emerald-500/20 shadow-inner'
+                    : 'text-slate-400 hover:bg-slate-800/50 hover:text-slate-200'
+                }`}
+              >
+                <Database size={20} className="shrink-0 transition-transform group-hover:scale-110" />
+                <span className="font-medium text-sm flex-1 text-left">Kelola Data</span>
+                <span className="text-xs bg-emerald-500/20 text-emerald-300 px-1.5 py-0.5 rounded-full mr-1">{uploadedLayers.length}</span>
+                {kelolaDataOpen ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
+              </button>
+
+              {kelolaDataOpen && (
+                <div className="ml-3 border-l border-slate-700 pl-2 space-y-1">
+                  <p className="px-3 py-1.5 text-[10px] text-slate-500 uppercase tracking-wider font-bold">File yang aktif</p>
+                  {uploadedLayers.map((layer, idx) => (
+                    <div
+                      key={layer.id}
+                      className="flex items-center gap-2 px-3 py-2 rounded-md bg-slate-800/40 border border-slate-700/40 group/item"
+                    >
+                      <div className="w-5 h-5 rounded shrink-0 bg-emerald-500/20 flex items-center justify-center">
+                        <span className="text-[9px] font-bold text-emerald-400">{idx + 1}</span>
+                      </div>
+                      <span
+                        className="flex-1 text-xs text-slate-300 truncate"
+                        title={layer.name}
+                      >
+                        {layer.name.replace(/\.(geojson|json)$/i, '')}
+                      </span>
+                      <button
+                        onClick={() => handleRemoveLayer(layer.id)}
+                        title="Hapus layer ini"
+                        className="shrink-0 p-1 rounded text-slate-600 hover:text-red-400 hover:bg-red-500/10 transition-all opacity-0 group-hover/item:opacity-100"
+                      >
+                        <Trash2 size={12} />
+                      </button>
+                    </div>
+                  ))}
+                  <button
+                    onClick={handleClearData}
+                    className="w-full mt-1 flex items-center gap-2 px-3 py-1.5 rounded-md text-red-400/70 hover:text-red-400 hover:bg-red-500/10 transition-all text-xs"
+                  >
+                    <Trash2 size={13} />
+                    <span>Hapus Semua Layer</span>
+                  </button>
+                </div>
+              )}
+            </>
           )}
           
           {/* ── Spatial Analysis (collapsible) ── */}
