@@ -58,8 +58,8 @@ export default function Dashboard() {
   // ─── Uploaded Layers State ─────────────────────────────────────────────
   interface LayerEntry { id: string; name: string; }
   const [uploadedLayers, setUploadedLayers] = useState<LayerEntry[]>([]);
-  const [isUploading, setIsUploading] = useState(false);
   const [kelolaDataOpen, setKelolaDataOpen] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const router = useRouter();
@@ -118,8 +118,6 @@ export default function Dashboard() {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    setIsUploading(true);
-
     const token = localStorage.getItem('token');
     if (!token) {
       alert('Sesi Anda sudah berakhir. Silakan login kembali.');
@@ -129,6 +127,7 @@ export default function Dashboard() {
 
     const formData = new FormData();
     formData.append('file', file);
+    setIsUploading(true);
 
     try {
       const res = await fetch(`${API_URL}/geojson/upload`, {
@@ -173,8 +172,9 @@ export default function Dashboard() {
       alert(`Error: ${err.message}`);
     } finally {
       setIsUploading(false);
-      e.target.value = '';
     }
+
+    e.target.value = '';
   };
 
   const handleRemoveLayer = (layerId: string) => {
@@ -742,11 +742,11 @@ export default function Dashboard() {
           )}
 
           {/* ── Import & Kelola Data ── */}
-          <input type="file" accept=".geojson,.json" className="hidden" ref={fileInputRef} onChange={handleFileUpload} disabled={isUploading} />
+          <input type="file" accept=".geojson,.json" className="hidden" ref={fileInputRef} onChange={handleFileUpload} />
           <SidebarItem 
-            icon={isUploading ? <Loader2 size={20} className="animate-spin text-red-600" /> : <UploadCloud size={20} />} 
+            icon={isUploading ? <Loader2 size={20} className="animate-spin text-stone-400" /> : <UploadCloud size={20} />} 
             label={isUploading ? "Mengunggah..." : "Import Data"} 
-            onClick={() => { if (!isUploading) fileInputRef.current?.click() }} 
+            onClick={() => !isUploading && fileInputRef.current?.click()} 
           />
 
           {/* Kelola Data – daftar file yang sudah terupload */}
