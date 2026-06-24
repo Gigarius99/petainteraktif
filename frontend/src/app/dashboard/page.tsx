@@ -595,6 +595,70 @@ export default function Dashboard() {
         <nav className="flex-1 w-full px-3 space-y-1 overflow-y-auto scrollbar-thin scrollbar-track-stone-100/50 scrollbar-thumb-stone-300/50">
 
 
+          {/* ── Import & Kelola Data ── */}
+          <input type="file" accept=".geojson,.json" className="hidden" ref={fileInputRef} onChange={handleFileUpload} />
+          <SidebarItem 
+            icon={isUploading ? <Loader2 size={20} className="animate-spin text-stone-400" /> : <UploadCloud size={20} />} 
+            label={isUploading ? "Mengunggah..." : "Import Data"} 
+            onClick={() => !isUploading && fileInputRef.current?.click()} 
+          />
+
+          {/* Kelola Data – daftar file yang sudah terupload */}
+          {uploadedLayers.length > 0 && (
+            <>
+              <button
+                onClick={() => setKelolaDataOpen(!kelolaDataOpen)}
+                className={`w-full flex items-center gap-3 p-3 px-4 rounded-lg transition-all duration-200 group ${
+                  kelolaDataOpen
+                    ? 'bg-stone-900 text-white shadow-md'
+                    : 'text-stone-600 hover:bg-stone-100/50 hover:text-stone-800'
+                }`}
+              >
+                <Database size={20} className="shrink-0 transition-transform group-hover:scale-110" />
+                <span className="font-medium text-sm flex-1 text-left">Kelola Data</span>
+                <span className="text-xs bg-red-100 text-red-600 px-1.5 py-0.5 rounded-full mr-1">{uploadedLayers.length}</span>
+                {kelolaDataOpen ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
+              </button>
+
+              {kelolaDataOpen && (
+                <div className="ml-3 border-l border-stone-300 pl-2 space-y-1">
+                  <p className="px-3 py-1.5 text-[10px] text-stone-500 uppercase tracking-wider font-bold">File yang aktif</p>
+                  {uploadedLayers.map((layer, idx) => (
+                    <div
+                      key={layer.id}
+                      className="flex items-center gap-2 px-3 py-2 rounded-md bg-stone-100/40 border border-stone-300/40 group/item"
+                    >
+                      <div className="w-5 h-5 rounded shrink-0 bg-red-100 flex items-center justify-center">
+                        <span className="text-[9px] font-bold text-red-600">{idx + 1}</span>
+                      </div>
+                      <span
+                        className="flex-1 text-xs text-stone-700 truncate"
+                        title={layer.name}
+                      >
+                        {layer.name.replace(/\.(geojson|json)$/i, '')}
+                      </span>
+                      <button
+                        onClick={() => handleRemoveLayer(layer.id)}
+                        title="Hapus layer ini"
+                        className="shrink-0 p-1 rounded text-zinc-600 hover:text-red-600 hover:bg-red-500/10 transition-all opacity-0 group-hover/item:opacity-100"
+                      >
+                        <Trash2 size={12} />
+                      </button>
+                    </div>
+                  ))}
+                  <button
+                    onClick={handleClearData}
+                    className="w-full mt-1 flex items-center gap-2 px-3 py-1.5 rounded-md text-red-600/70 hover:text-red-600 hover:bg-red-500/10 transition-all text-xs"
+                  >
+                    <Trash2 size={13} />
+                    <span>Hapus Semua Layer</span>
+                  </button>
+                </div>
+              )}
+            </>
+          )}
+          
+
           {/* ── Layer Manager (collapsible) ── */}
           <button
             onClick={() => setLayerOpen(!layerOpen)}
@@ -746,69 +810,6 @@ export default function Dashboard() {
             </>
           )}
 
-          {/* ── Import & Kelola Data ── */}
-          <input type="file" accept=".geojson,.json" className="hidden" ref={fileInputRef} onChange={handleFileUpload} />
-          <SidebarItem 
-            icon={isUploading ? <Loader2 size={20} className="animate-spin text-stone-400" /> : <UploadCloud size={20} />} 
-            label={isUploading ? "Mengunggah..." : "Import Data"} 
-            onClick={() => !isUploading && fileInputRef.current?.click()} 
-          />
-
-          {/* Kelola Data – daftar file yang sudah terupload */}
-          {uploadedLayers.length > 0 && (
-            <>
-              <button
-                onClick={() => setKelolaDataOpen(!kelolaDataOpen)}
-                className={`w-full flex items-center gap-3 p-3 px-4 rounded-lg transition-all duration-200 group ${
-                  kelolaDataOpen
-                    ? 'bg-stone-900 text-white shadow-md'
-                    : 'text-stone-600 hover:bg-stone-100/50 hover:text-stone-800'
-                }`}
-              >
-                <Database size={20} className="shrink-0 transition-transform group-hover:scale-110" />
-                <span className="font-medium text-sm flex-1 text-left">Kelola Data</span>
-                <span className="text-xs bg-red-100 text-red-600 px-1.5 py-0.5 rounded-full mr-1">{uploadedLayers.length}</span>
-                {kelolaDataOpen ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
-              </button>
-
-              {kelolaDataOpen && (
-                <div className="ml-3 border-l border-stone-300 pl-2 space-y-1">
-                  <p className="px-3 py-1.5 text-[10px] text-stone-500 uppercase tracking-wider font-bold">File yang aktif</p>
-                  {uploadedLayers.map((layer, idx) => (
-                    <div
-                      key={layer.id}
-                      className="flex items-center gap-2 px-3 py-2 rounded-md bg-stone-100/40 border border-stone-300/40 group/item"
-                    >
-                      <div className="w-5 h-5 rounded shrink-0 bg-red-100 flex items-center justify-center">
-                        <span className="text-[9px] font-bold text-red-600">{idx + 1}</span>
-                      </div>
-                      <span
-                        className="flex-1 text-xs text-stone-700 truncate"
-                        title={layer.name}
-                      >
-                        {layer.name.replace(/\.(geojson|json)$/i, '')}
-                      </span>
-                      <button
-                        onClick={() => handleRemoveLayer(layer.id)}
-                        title="Hapus layer ini"
-                        className="shrink-0 p-1 rounded text-zinc-600 hover:text-red-600 hover:bg-red-500/10 transition-all opacity-0 group-hover/item:opacity-100"
-                      >
-                        <Trash2 size={12} />
-                      </button>
-                    </div>
-                  ))}
-                  <button
-                    onClick={handleClearData}
-                    className="w-full mt-1 flex items-center gap-2 px-3 py-1.5 rounded-md text-red-600/70 hover:text-red-600 hover:bg-red-500/10 transition-all text-xs"
-                  >
-                    <Trash2 size={13} />
-                    <span>Hapus Semua Layer</span>
-                  </button>
-                </div>
-              )}
-            </>
-          )}
-          
           {/* ── Spatial Analysis (collapsible) ── */}
           <button
             onClick={() => setAnalysisOpen(!analysisOpen)}
