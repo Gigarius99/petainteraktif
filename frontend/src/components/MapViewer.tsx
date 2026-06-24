@@ -251,10 +251,9 @@ export default function MapViewer({
     const key = `${desa}__${kec}`;
     const score = pfiDesaScores[key];
 
-    if (score === undefined || score < 0) return [80, 80, 100, 100];
+    if (score === undefined || score < 0) return [0, 0, 0, 50];
     
-    const hex = getPFIColor(score);
-    return hexToRgba(hex, 255);
+    return [0, 0, 0, 80];
   };
 
   // ─── Normal GeoJSON Layer ──────────────────────────────────────────────────
