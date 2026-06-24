@@ -4,7 +4,7 @@ import { useRouter } from 'next/navigation';
 import MapViewer from '@/components/MapViewer';
 import {
   Layers, Database, Activity, Share2, UploadCloud,
-  LogOut, ChevronDown, ChevronRight, MapPin, Map, Download, PenLine, AlertTriangle, Trash2
+  LogOut, ChevronDown, ChevronRight, MapPin, Map, Download, PenLine, AlertTriangle, Trash2, Loader2
 } from 'lucide-react';
 import * as turf from '@turf/turf';
 
@@ -58,6 +58,7 @@ export default function Dashboard() {
   // ─── Uploaded Layers State ─────────────────────────────────────────────
   interface LayerEntry { id: string; name: string; }
   const [uploadedLayers, setUploadedLayers] = useState<LayerEntry[]>([]);
+  const [isUploading, setIsUploading] = useState(false);
   const [kelolaDataOpen, setKelolaDataOpen] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -117,6 +118,8 @@ export default function Dashboard() {
     const file = e.target.files?.[0];
     if (!file) return;
 
+    setIsUploading(true);
+
     const token = localStorage.getItem('token');
     if (!token) {
       alert('Sesi Anda sudah berakhir. Silakan login kembali.');
@@ -168,9 +171,10 @@ export default function Dashboard() {
 
     } catch (err: any) {
       alert(`Error: ${err.message}`);
+    } finally {
+      setIsUploading(false);
+      e.target.value = '';
     }
-
-    e.target.value = '';
   };
 
   const handleRemoveLayer = (layerId: string) => {
@@ -738,8 +742,12 @@ export default function Dashboard() {
           )}
 
           {/* ── Import & Kelola Data ── */}
-          <input type="file" accept=".geojson,.json" className="hidden" ref={fileInputRef} onChange={handleFileUpload} />
-          <SidebarItem icon={<UploadCloud size={20} />} label="Import Data" onClick={() => fileInputRef.current?.click()} />
+          <input type="file" accept=".geojson,.json" className="hidden" ref={fileInputRef} onChange={handleFileUpload} disabled={isUploading} />
+          <SidebarItem 
+            icon={isUploading ? <Loader2 size={20} className="animate-spin text-red-600" /> : <UploadCloud size={20} />} 
+            label={isUploading ? "Mengunggah..." : "Import Data"} 
+            onClick={() => { if (!isUploading) fileInputRef.current?.click() }} 
+          />
 
           {/* Kelola Data – daftar file yang sudah terupload */}
           {uploadedLayers.length > 0 && (
