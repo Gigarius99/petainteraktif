@@ -216,8 +216,8 @@ export default function MapViewer({
     if (partyFilter === 'above50' && !isAbove) return [60, 60, 80, 30];
     if (partyFilter === 'below50' && isAbove) return [60, 60, 80, 30];
 
-    if (isAbove) return [34, 197, 94, 210];   // green-500
-    return [249, 115, 22, 210];               // orange-500
+    if (isAbove) return [34, 197, 94, 210];   // stone-500
+    return [249, 115, 22, 210];               // red-500
   };
 
   const getPartyLineColor = (f: any): [number, number, number, number] => {
@@ -419,7 +419,7 @@ export default function MapViewer({
   const belowCount = Object.values(partyDesaPercentages).filter(p => p < 50).length;
 
   return (
-    <div className="relative w-full h-full bg-slate-900 rounded-lg overflow-hidden border border-slate-800 shadow-xl">
+    <div className="relative w-full h-full bg-white rounded-lg overflow-hidden border border-stone-200 shadow-xl">
       <DeckGL
         viewState={viewState}
         controller={drawMode ? { doubleClickZoom: false } : true}
@@ -431,7 +431,7 @@ export default function MapViewer({
       >
         <Map
           mapLib={maplibregl as any}
-          mapStyle="https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json"
+          mapStyle="https://basemaps.cartocdn.com/gl/positron-gl-style/style.json"
         >
           <NavigationControl position="bottom-right" />
           <FullscreenControl position="top-right" />
@@ -441,49 +441,49 @@ export default function MapViewer({
       </DeckGL>
 
       {/* Brand overlay — becomes party insight panel when party is selected */}
-      <div className={`absolute top-4 left-4 bg-slate-900/90 backdrop-blur-md p-4 rounded-xl border shadow-xl text-white transition-all duration-300 ${
-        selectedParty ? 'border-blue-500/40 w-64' : isPFIMode ? 'border-purple-500/40 w-64' : 'border-slate-700 pointer-events-none'
+      <div className={`absolute top-4 left-4 bg-white/90 backdrop-blur-md p-4 rounded-xl border shadow-xl text-stone-900 transition-all duration-300 ${
+        selectedParty ? 'border-red-500/40 w-64' : isPFIMode ? 'border-red-500/40 w-64' : 'border-stone-300 pointer-events-none'
       }`}>
-        <h2 className="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-blue-400 to-cyan-400">
+        <h2 className="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-red-400 to-red-400">
           GEO SmartMap
         </h2>
 
         {isPFIMode ? (
           /* ── PFI Legend Panel ── */
           <div className="mt-2">
-            <p className="text-xs text-slate-400 mb-1">Index Fragmentasi Politik</p>
-            <p className="text-sm font-bold text-purple-300 mb-3 truncate">Skala (0-100)</p>
+            <p className="text-xs text-stone-600 mb-1">Index Fragmentasi Politik</p>
+            <p className="text-sm font-bold text-red-300 mb-3 truncate">Skala (0-100)</p>
 
             <div className="flex flex-col gap-2 text-xs">
               <div className="flex items-center gap-2">
                 <div className="w-3 h-3 rounded-full" style={{ backgroundColor: getPFIColor(20) }} />
-                <span className="text-slate-300">0-30: Dominan</span>
+                <span className="text-stone-700">0-30: Dominan</span>
               </div>
               <div className="flex items-center gap-2">
                 <div className="w-3 h-3 rounded-full" style={{ backgroundColor: getPFIColor(40) }} />
-                <span className="text-slate-300">31-50: Stabil</span>
+                <span className="text-stone-700">31-50: Stabil</span>
               </div>
               <div className="flex items-center gap-2">
                 <div className="w-3 h-3 rounded-full" style={{ backgroundColor: getPFIColor(60) }} />
-                <span className="text-slate-300">51-70: Kompetitif</span>
+                <span className="text-stone-700">51-70: Kompetitif</span>
               </div>
               <div className="flex items-center gap-2">
                 <div className="w-3 h-3 rounded-full" style={{ backgroundColor: getPFIColor(80) }} />
-                <span className="text-slate-300">71-100: Sangat Cair</span>
+                <span className="text-stone-700">71-100: Sangat Cair</span>
               </div>
             </div>
           </div>
         ) : !selectedParty ? (
           <>
-            <p className="text-sm text-slate-400 mt-1">Interactive GeoJSON Platform</p>
+            <p className="text-sm text-stone-600 mt-1">Interactive GeoJSON Platform</p>
             {(highlightedKec || highlightedDesa) && !drawMode && (
-              <div className="mt-2 border-t border-slate-700 pt-2 flex flex-col gap-1">
+              <div className="mt-2 border-t border-stone-300 pt-2 flex flex-col gap-1">
                 {highlightedKec === 'ALL' ? (
-                  <p className="text-xs text-blue-400">📍 Seluruh Kabupaten</p>
+                  <p className="text-xs text-red-400">📍 Seluruh Kabupaten</p>
                 ) : (
                   <>
-                    {highlightedKec && <p className="text-xs text-cyan-400">📍 Kec. {highlightedKec}</p>}
-                    {highlightedDesa && <p className="text-xs text-green-400">📍 Desa {highlightedDesa}</p>}
+                    {highlightedKec && <p className="text-xs text-red-400">📍 Kec. {highlightedKec}</p>}
+                    {highlightedDesa && <p className="text-xs text-stone-400">📍 Desa {highlightedDesa}</p>}
                   </>
                 )}
               </div>
@@ -492,18 +492,18 @@ export default function MapViewer({
         ) : (
           /* ── Party Insight Panel ── */
           <div className="mt-2">
-            <p className="text-xs text-slate-400 mb-1">Insight Suara</p>
-            <p className="text-sm font-bold text-blue-300 mb-3 truncate">{selectedParty}</p>
+            <p className="text-xs text-stone-600 mb-1">Insight Suara</p>
+            <p className="text-sm font-bold text-red-300 mb-3 truncate">{selectedParty}</p>
 
             {/* Legend */}
             <div className="flex gap-2 mb-3 text-xs">
               <div className="flex items-center gap-1.5">
-                <div className="w-3 h-3 rounded-full bg-green-500" />
-                <span className="text-slate-300">≥ 50%</span>
+                <div className="w-3 h-3 rounded-full bg-stone-500" />
+                <span className="text-stone-700">≥ 50%</span>
               </div>
               <div className="flex items-center gap-1.5">
-                <div className="w-3 h-3 rounded-full bg-orange-500" />
-                <span className="text-slate-300">&lt; 50%</span>
+                <div className="w-3 h-3 rounded-full bg-red-500" />
+                <span className="text-stone-700">&lt; 50%</span>
               </div>
             </div>
 
@@ -513,30 +513,30 @@ export default function MapViewer({
                 onClick={() => onPartyFilterChange?.(partyFilter === 'above50' ? null : 'above50')}
                 className={`flex items-center justify-between w-full px-3 py-2 rounded-lg text-xs font-semibold transition-all border ${
                   partyFilter === 'above50'
-                    ? 'bg-green-600 text-white border-green-400 shadow-lg shadow-green-900/40'
-                    : 'bg-green-500/10 text-green-300 border-green-500/30 hover:bg-green-500/20'
+                    ? 'bg-stone-600 text-stone-900 border-stone-400 shadow-lg shadow-stone-900/40'
+                    : 'bg-stone-500/10 text-stone-300 border-stone-500/30 hover:bg-stone-500/20'
                 }`}
               >
                 <span>▲ Di atas 50%</span>
-                <span className="bg-green-900/60 px-2 py-0.5 rounded-full">{aboveCount} desa</span>
+                <span className="bg-stone-900/60 px-2 py-0.5 rounded-full">{aboveCount} desa</span>
               </button>
               <button
                 onClick={() => onPartyFilterChange?.(partyFilter === 'below50' ? null : 'below50')}
                 className={`flex items-center justify-between w-full px-3 py-2 rounded-lg text-xs font-semibold transition-all border ${
                   partyFilter === 'below50'
-                    ? 'bg-orange-600 text-white border-orange-400 shadow-lg shadow-orange-900/40'
-                    : 'bg-orange-500/10 text-orange-300 border-orange-500/30 hover:bg-orange-500/20'
+                    ? 'bg-red-600 text-stone-900 border-red-400 shadow-lg shadow-red-900/40'
+                    : 'bg-red-500/10 text-red-300 border-red-500/30 hover:bg-red-500/20'
                 }`}
               >
                 <span>▼ Di bawah 50%</span>
-                <span className="bg-orange-900/60 px-2 py-0.5 rounded-full">{belowCount} desa</span>
+                <span className="bg-red-900/60 px-2 py-0.5 rounded-full">{belowCount} desa</span>
               </button>
             </div>
 
             {partyFilter && (
               <button
                 onClick={() => onPartyFilterChange?.(null)}
-                className="mt-2 w-full text-xs text-slate-400 hover:text-slate-200 transition-colors"
+                className="mt-2 w-full text-xs text-stone-600 hover:text-stone-800 transition-colors"
               >
                 ✕ Reset filter
               </button>
@@ -548,7 +548,7 @@ export default function MapViewer({
       {/* ─── Draw Mode Overlay ─────────────────────────────────────────────── */}
       {drawMode && (
         <>
-          <div className="absolute top-0 left-0 right-0 bg-amber-500/90 backdrop-blur-sm text-slate-900 px-4 py-2.5 flex items-center justify-between z-20 shadow-lg">
+          <div className="absolute top-0 left-0 right-0 bg-red-500/90 backdrop-blur-sm text-slate-900 px-4 py-2.5 flex items-center justify-between z-20 shadow-lg">
             <div className="flex items-center gap-2">
               <span className="text-lg">✏️</span>
               <div>
@@ -563,26 +563,26 @@ export default function MapViewer({
               <button
                 onClick={onUndoPoint}
                 disabled={drawingPoints.length === 0}
-                className="px-3 py-1 bg-slate-800/80 text-white text-xs rounded-lg hover:bg-slate-700 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
+                className="px-3 py-1 bg-stone-100/80 text-stone-900 text-xs rounded-lg hover:bg-stone-200 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
               >
                 ↩ Undo
               </button>
               <button
                 onClick={onFinishDraw}
                 disabled={drawingPoints.length < 3}
-                className="px-3 py-1 bg-green-600 text-white text-xs font-bold rounded-lg hover:bg-green-500 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
+                className="px-3 py-1 bg-stone-600 text-stone-900 text-xs font-bold rounded-lg hover:bg-stone-500 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
               >
                 ✓ Selesai ({drawingPoints.length >= 3 ? 'Simpan Polygon' : `Min. 3 titik`})
               </button>
               <button
                 onClick={onCancelDraw}
-                className="px-3 py-1 bg-red-600 text-white text-xs rounded-lg hover:bg-red-500 transition-all"
+                className="px-3 py-1 bg-red-600 text-stone-900 text-xs rounded-lg hover:bg-red-500 transition-all"
               >
                 ✕ Batal
               </button>
             </div>
           </div>
-          <div className="absolute bottom-16 left-1/2 -translate-x-1/2 bg-slate-900/80 text-slate-300 text-xs px-4 py-2 rounded-full backdrop-blur-sm pointer-events-none z-20">
+          <div className="absolute bottom-16 left-1/2 -translate-x-1/2 bg-white/80 text-stone-700 text-xs px-4 py-2 rounded-full backdrop-blur-sm pointer-events-none z-20">
             🖱️ Klik untuk tambah titik sudut polygon desa
           </div>
         </>
