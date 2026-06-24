@@ -64,33 +64,39 @@ export class GeojsonService {
       throw new Error(`Gagal membuat record layer: ${err.message}`);
     }
 
-    // 5. Insert features ke PostGIS
+    // 5. Insert features ke PostGIS dengan batching untuk mempercepat & menghindari timeout
     let inserted = 0;
     let skipped = 0;
-    for (const feature of geojson.features) {
-      let geometryStr = JSON.stringify(feature.geometry);
-      if (!feature.geometry) {
-        // Fallback to empty GeometryCollection if missing
-        geometryStr = JSON.stringify({ type: 'GeometryCollection', geometries: [] });
-      }
-      
-      const featureId = randomUUID();
-      const propertiesStr = JSON.stringify(feature.properties || {});
-      try {
-        await this.prisma.$executeRaw`
-          INSERT INTO "GeoFeatures" (id, layer_id, geometry, properties)
-          VALUES (
-            ${featureId},
-            ${mapLayerId},
-            ST_SetSRID(ST_GeomFromGeoJSON(${geometryStr}), 4326),
-            ${propertiesStr}::jsonb
-          )
-        `;
-        inserted++;
-      } catch (err: any) {
-        console.error(`Skipping feature due to geometry error: ${err.message}`);
-        skipped++;
-      }
+    const batchSize = 100;
+    for (let i = 0; i < geojson.features.length; i += batchSize) {
+      const chunk = geojson.features.slice(i, i + batchSize);
+      await Promise.all(
+        chunk.map(async (feature: any) => {
+          let geometryStr = JSON.stringify(feature.geometry);
+          if (!feature.geometry) {
+            // Fallback to empty GeometryCollection if missing
+            geometryStr = JSON.stringify({ type: 'GeometryCollection', geometries: [] });
+          }
+          
+          const featureId = randomUUID();
+          const propertiesStr = JSON.stringify(feature.properties || {});
+          try {
+            await this.prisma.$executeRaw`
+              INSERT INTO "GeoFeatures" (id, layer_id, geometry, properties)
+              VALUES (
+                ${featureId},
+                ${mapLayerId},
+                ST_SetSRID(ST_GeomFromGeoJSON(${geometryStr}), 4326),
+                ${propertiesStr}::jsonb
+              )
+            `;
+            inserted++;
+          } catch (err: any) {
+            console.error(`Skipping feature due to geometry error: ${err.message}`);
+            skipped++;
+          }
+        })
+      );
     }
 
     if (inserted === 0) {

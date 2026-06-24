@@ -125,6 +125,11 @@ export default function Dashboard() {
       return;
     }
 
+    if (file.size > 4.5 * 1024 * 1024) {
+      alert('File terlalu besar! Batas maksimal ukuran file adalah 4.5 MB karena batasan server (Vercel). Harap perkecil GeoJSON Anda (misal dengan mapshaper.org).');
+      return;
+    }
+
     const formData = new FormData();
     formData.append('file', file);
     setIsUploading(true);
