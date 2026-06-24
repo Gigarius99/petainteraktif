@@ -589,7 +589,7 @@ export default function Dashboard() {
           {/* ── Layer Manager (collapsible) ── */}
           <button
             onClick={() => setLayerOpen(!layerOpen)}
-            className="w-full flex items-center gap-3 p-3 px-4 rounded-lg transition-all duration-200 group bg-red-50 text-red-600 border border-red-500/20 shadow-inner"
+            className="w-full flex items-center gap-3 p-3 px-4 rounded-lg transition-all duration-200 group bg-stone-900 text-white shadow-md"
           >
             <Layers size={20} className="shrink-0" />
             <span className="font-medium text-sm flex-1 text-left">Layer Manager</span>
@@ -617,7 +617,7 @@ export default function Dashboard() {
                     onClick={() => handleKecClick('ALL')}
                     className={`w-full text-left px-3 py-1.5 rounded text-xs transition-all ${
                       selectedKec === 'ALL'
-                        ? 'bg-red-600/20 text-red-300 border border-red-500/30 font-bold'
+                        ? 'bg-red-600 text-white shadow-sm font-bold'
                         : 'text-stone-700 hover:bg-stone-100 hover:text-stone-800 font-bold'
                     }`}
                   >
@@ -630,7 +630,7 @@ export default function Dashboard() {
                       onClick={() => handleKecClick(kec)}
                       className={`w-full text-left px-3 py-1.5 rounded text-xs transition-all ${
                         selectedKec === kec
-                          ? 'bg-red-600/20 text-red-300 border border-red-500/30'
+                          ? 'bg-red-600 text-white shadow-sm'
                           : 'text-stone-600 hover:bg-stone-100 hover:text-stone-800'
                       }`}
                     >
@@ -706,7 +706,7 @@ export default function Dashboard() {
               >
                 <AlertTriangle size={18} className="shrink-0" />
                 <span className="font-medium text-sm flex-1 text-left">Desa Tanpa Peta</span>
-                <span className="text-xs bg-red-500/20 px-1.5 py-0.5 rounded-full">{missingGeoFeatures.length}</span>
+                <span className="text-xs bg-red-100 px-1.5 py-0.5 rounded-full">{missingGeoFeatures.length}</span>
                 {missingGeoOpen ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
               </button>
 
@@ -718,14 +718,14 @@ export default function Dashboard() {
                     const kecName = getProp(f.properties, 'kecamatan') || '';
                     return (
                       <div key={i} className="flex items-center gap-1 pr-1">
-                        <span className="flex-1 text-xs text-red-300 px-2 py-1 truncate">
+                        <span className="flex-1 text-xs text-red-600 px-2 py-1 truncate">
                           {desaName}
                           <span className="text-stone-500 ml-1 text-xs">{kecName}</span>
                         </span>
                         <button
                           onClick={() => startDrawForDesa(f)}
                           title={`Gambar batas ${desaName}`}
-                          className="shrink-0 p-1.5 rounded bg-red-500/20 text-red-300 hover:bg-red-500/40 hover:text-red-100 transition-all"
+                          className="shrink-0 p-1.5 rounded bg-red-100 text-red-600 hover:bg-red-500/40 hover:text-red-100 transition-all"
                         >
                           <PenLine size={13} />
                         </button>
@@ -748,13 +748,13 @@ export default function Dashboard() {
                 onClick={() => setKelolaDataOpen(!kelolaDataOpen)}
                 className={`w-full flex items-center gap-3 p-3 px-4 rounded-lg transition-all duration-200 group ${
                   kelolaDataOpen
-                    ? 'bg-red-50 text-red-600 border border-red-500/20 shadow-inner'
+                    ? 'bg-stone-900 text-white shadow-md'
                     : 'text-stone-600 hover:bg-stone-100/50 hover:text-stone-800'
                 }`}
               >
                 <Database size={20} className="shrink-0 transition-transform group-hover:scale-110" />
                 <span className="font-medium text-sm flex-1 text-left">Kelola Data</span>
-                <span className="text-xs bg-red-500/20 text-red-300 px-1.5 py-0.5 rounded-full mr-1">{uploadedLayers.length}</span>
+                <span className="text-xs bg-red-100 text-red-600 px-1.5 py-0.5 rounded-full mr-1">{uploadedLayers.length}</span>
                 {kelolaDataOpen ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
               </button>
 
@@ -766,7 +766,7 @@ export default function Dashboard() {
                       key={layer.id}
                       className="flex items-center gap-2 px-3 py-2 rounded-md bg-stone-100/40 border border-stone-300/40 group/item"
                     >
-                      <div className="w-5 h-5 rounded shrink-0 bg-red-500/20 flex items-center justify-center">
+                      <div className="w-5 h-5 rounded shrink-0 bg-red-100 flex items-center justify-center">
                         <span className="text-[9px] font-bold text-red-600">{idx + 1}</span>
                       </div>
                       <span
@@ -801,7 +801,7 @@ export default function Dashboard() {
             onClick={() => setAnalysisOpen(!analysisOpen)}
             className={`w-full flex items-center gap-3 p-3 px-4 rounded-lg transition-all duration-200 group ${
               analysisOpen
-                ? 'bg-red-50 text-red-600 border border-red-500/20 shadow-inner'
+                ? 'bg-stone-900 text-white shadow-md'
                 : 'text-stone-600 hover:bg-stone-100/50 hover:text-stone-800'
             }`}
           >
@@ -838,8 +838,8 @@ export default function Dashboard() {
                           onClick={() => { setSelectedPemilu('pemilu_2024'); setSelectedElection(election as any); setIsPFIMode(false); }}
                           className={`w-full text-left px-3 py-1.5 rounded text-xs transition-all ${
                             selectedPemilu === 'pemilu_2024' && selectedElection === election && !isPFIMode
-                              ? 'bg-red-600/20 text-red-300 border border-red-500/30'
-                              : 'text-stone-600 hover:bg-stone-100 hover:text-red-300'
+                              ? 'bg-red-600 text-white shadow-sm'
+                              : 'text-stone-600 hover:bg-stone-100 hover:text-red-600'
                           }`}
                         >
                           {election}
@@ -863,8 +863,8 @@ export default function Dashboard() {
                           onClick={() => { setSelectedPemilu('pemilu_2019'); setSelectedElection(election as any); setIsPFIMode(false); }}
                           className={`w-full text-left px-3 py-1.5 rounded text-xs transition-all ${
                             selectedPemilu === 'pemilu_2019' && selectedElection === election && !isPFIMode
-                              ? 'bg-red-600/20 text-red-300 border border-red-500/30'
-                              : 'text-stone-600 hover:bg-stone-100 hover:text-red-300'
+                              ? 'bg-red-600 text-white shadow-sm'
+                              : 'text-stone-600 hover:bg-stone-100 hover:text-red-600'
                           }`}
                         >
                           {election}
@@ -879,7 +879,7 @@ export default function Dashboard() {
               <button
                 onClick={() => setPfiMenuOpen(!pfiMenuOpen)}
                 className={`w-full flex items-center gap-2 px-3 py-2 rounded-md transition-all text-sm ${
-                  pfiMenuOpen ? 'text-red-300 bg-red-50 border border-red-500/20' : 'text-stone-700 hover:bg-stone-100 hover:text-stone-900'
+                  pfiMenuOpen ? 'bg-red-50 text-red-600' : 'text-stone-700 hover:bg-stone-100 hover:text-stone-900'
                 }`}
               >
                 <span className="flex-1 text-left font-medium">Political Fragmentation Index</span>
@@ -909,8 +909,8 @@ export default function Dashboard() {
                           }}
                           className={`w-full text-left px-3 py-1.5 rounded text-xs transition-all ${
                             selectedPemilu === 'pemilu_2024' && selectedElection === election && isPFIMode
-                              ? 'bg-red-600/20 text-red-300 border border-red-500/30'
-                              : 'text-stone-600 hover:bg-stone-100 hover:text-red-300'
+                              ? 'bg-red-600 text-white shadow-sm'
+                              : 'text-stone-600 hover:bg-stone-100 hover:text-red-600'
                           }`}
                         >
                           {election}
@@ -940,8 +940,8 @@ export default function Dashboard() {
                           }}
                           className={`w-full text-left px-3 py-1.5 rounded text-xs transition-all ${
                             selectedPemilu === 'pemilu_2019' && selectedElection === election && isPFIMode
-                              ? 'bg-red-600/20 text-red-300 border border-red-500/30'
-                              : 'text-stone-600 hover:bg-stone-100 hover:text-red-300'
+                              ? 'bg-red-600 text-white shadow-sm'
+                              : 'text-stone-600 hover:bg-stone-100 hover:text-red-600'
                           }`}
                         >
                           {election}
@@ -1006,7 +1006,7 @@ export default function Dashboard() {
               </div>
               
               <div className="text-sm mb-4">
-                <p className="text-red-300 font-semibold mb-2">📍 {aggregatedData.regionName}</p>
+                <p className="text-red-600 font-semibold mb-2">📍 {aggregatedData.regionName}</p>
                 <div className="flex justify-between items-center bg-stone-100/60 p-2.5 rounded-t border border-stone-300/50">
                   <span className="text-stone-600">Total TPS</span>
                   <span className="font-bold text-stone-800">{aggregatedData.total_tps.toLocaleString('id-ID')}</span>
@@ -1173,25 +1173,25 @@ export default function Dashboard() {
                           onClick={() => handlePartyClick(nama)}
                           className={`w-full text-left rounded p-2.5 border transition-all duration-200 ${
                             isSelected
-                              ? 'bg-red-600/25 border-red-400/60 ring-1 ring-red-400/40 shadow-lg shadow-red-900/20'
-                              : 'bg-stone-100/40 border-stone-300/50 hover:bg-stone-200/60 hover:border-zinc-500/60'
+                              ? 'bg-red-600 border-red-600 shadow-md text-white'
+                              : 'bg-white border-stone-200 hover:bg-stone-50 hover:border-stone-300'
                           }`}
                         >
                           <div className="flex justify-between text-xs mb-1.5">
-                            <span className={`font-medium pr-2 ${isSelected ? 'text-red-200' : 'text-stone-800'}`}>
+                            <span className={`font-medium pr-2 ${isSelected ? 'text-white' : 'text-stone-800'}`}>
                               {isSelected && <span className="mr-1">📍</span>}{nama}
                             </span>
-                            <span className="font-bold text-red-300">
+                            <span className={`font-bold ${isSelected ? 'text-white' : 'text-stone-900'}`}>
                               {suara.toLocaleString('id-ID')}
-                              <span className="text-stone-600 font-normal ml-1">
+                              <span className={`font-normal ml-1 ${isSelected ? 'text-red-100' : 'text-stone-500'}`}>
                                 ({pct.toFixed(1)}%)
                               </span>
                             </span>
                           </div>
                           {/* Progress Bar */}
-                          <div className="w-full bg-white rounded-full h-1.5 ring-1 ring-zinc-700/50">
+                          <div className={`w-full rounded-full h-1.5 ${isSelected ? 'bg-red-800/50' : 'bg-stone-200'}`}>
                             <div
-                              className={`h-1.5 rounded-full ${isSelected ? 'bg-gradient-to-r from-red-400 to-red-300' : 'bg-gradient-to-r from-red-500 to-red-400'}`}
+                              className={`h-1.5 rounded-full ${isSelected ? 'bg-white' : 'bg-red-600'}`}
                               style={{ width: `${pct}%` }}
                             />
                           </div>
@@ -1219,8 +1219,8 @@ function SidebarItem({ icon, label, active = false, onClick }: {
       onClick={onClick}
       className={`w-full flex items-center gap-3 p-3 px-4 rounded-lg transition-all duration-200 group ${
         active
-          ? 'bg-red-500/10 text-red-600 border border-red-500/20 shadow-inner'
-          : 'text-stone-600 hover:bg-stone-100/50 hover:text-stone-800'
+          ? 'bg-red-600 text-white shadow-md'
+          : 'text-stone-600 hover:bg-stone-100 hover:text-stone-900'
       }`}
     >
       <span className="shrink-0 transition-transform group-hover:scale-110">{icon}</span>

@@ -156,7 +156,7 @@ export default function MapViewer({
         getPosition: (d: any) => d.position,
         getRadius: 6,
         getFillColor: (d: any) => d.index === 0 ? [255, 200, 0, 255] : [255, 80, 80, 255],
-        getLineColor: [255, 255, 255, 255],
+        getLineColor: [0, 0, 0, 120],
         stroked: true,
         lineWidthMinPixels: 2,
         radiusUnits: 'pixels',
@@ -225,10 +225,10 @@ export default function MapViewer({
     const kec = getProp(f.properties, 'kecamatan');
     const key = `${desa}__${kec}`;
     const pct = partyDesaPercentages[key];
-    if (pct === undefined) return [80, 80, 100, 100];
-    if (partyFilter === 'above50' && pct < 50) return [80, 80, 100, 50];
-    if (partyFilter === 'below50' && pct >= 50) return [80, 80, 100, 50];
-    return pct >= 50 ? [34, 197, 94, 255] : [249, 115, 22, 255];
+    if (pct === undefined) return [0, 0, 0, 50];
+    if (partyFilter === 'above50' && pct < 50) return [0, 0, 0, 20];
+    if (partyFilter === 'below50' && pct >= 50) return [0, 0, 0, 20];
+    return [0, 0, 0, 80];
   };
 
 
@@ -300,11 +300,11 @@ export default function MapViewer({
       }
 
       if (highlightedDesa && getProp(f.properties, 'desa') === highlightedDesa && getProp(f.properties, 'kecamatan') === highlightedKec) {
-        return [100, 255, 150, 255];
+        return [0, 0, 0, 255];
       }
-      if (highlightedKec === 'ALL') return [100, 220, 255, 255];
-      if (highlightedKec && getProp(f.properties, 'kecamatan') === highlightedKec) return [100, 220, 255, 255];
-      return [255, 255, 255, 200];
+      if (highlightedKec === 'ALL') return [0, 0, 0, 150];
+      if (highlightedKec && getProp(f.properties, 'kecamatan') === highlightedKec) return [0, 0, 0, 150];
+      return [0, 0, 0, 60];
     },
     getLineWidth: (f: any) => {
       if (!f.geometry) return 0;
