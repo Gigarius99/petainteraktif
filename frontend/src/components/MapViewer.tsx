@@ -444,7 +444,7 @@ export default function MapViewer({
       <div className={`absolute top-4 left-4 bg-white/90 backdrop-blur-md p-4 rounded-xl border shadow-xl text-stone-900 transition-all duration-300 ${
         selectedParty ? 'border-red-500/40 w-64' : isPFIMode ? 'border-red-500/40 w-64' : 'border-stone-300 pointer-events-none'
       }`}>
-        <h2 className="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-red-400 to-red-400">
+        <h2 className="text-xl font-bold text-red-600">
           GEO SmartMap
         </h2>
 
@@ -452,7 +452,7 @@ export default function MapViewer({
           /* ── PFI Legend Panel ── */
           <div className="mt-2">
             <p className="text-xs text-stone-600 mb-1">Index Fragmentasi Politik</p>
-            <p className="text-sm font-bold text-red-300 mb-3 truncate">Skala (0-100)</p>
+            <p className="text-sm font-bold text-red-600 mb-3 truncate">Skala (0-100)</p>
 
             <div className="flex flex-col gap-2 text-xs">
               <div className="flex items-center gap-2">
@@ -493,7 +493,7 @@ export default function MapViewer({
           /* ── Party Insight Panel ── */
           <div className="mt-2">
             <p className="text-xs text-stone-600 mb-1">Insight Suara</p>
-            <p className="text-sm font-bold text-red-300 mb-3 truncate">{selectedParty}</p>
+            <p className="text-sm font-bold text-red-600 mb-3 truncate">{selectedParty}</p>
 
             {/* Legend */}
             <div className="flex gap-2 mb-3 text-xs">
@@ -513,23 +513,23 @@ export default function MapViewer({
                 onClick={() => onPartyFilterChange?.(partyFilter === 'above50' ? null : 'above50')}
                 className={`flex items-center justify-between w-full px-3 py-2 rounded-lg text-xs font-semibold transition-all border ${
                   partyFilter === 'above50'
-                    ? 'bg-stone-600 text-stone-900 border-stone-400 shadow-lg shadow-stone-900/40'
-                    : 'bg-stone-500/10 text-stone-300 border-stone-500/30 hover:bg-stone-500/20'
+                    ? 'bg-stone-800 text-white border-stone-800 shadow-md'
+                    : 'bg-stone-100 text-stone-700 border-stone-200 hover:bg-stone-200'
                 }`}
               >
                 <span>▲ Di atas 50%</span>
-                <span className="bg-stone-900/60 px-2 py-0.5 rounded-full">{aboveCount} desa</span>
+                <span className={`px-2 py-0.5 rounded-full ${partyFilter === 'above50' ? 'bg-stone-600 text-white' : 'bg-stone-300 text-stone-800'}`}>{aboveCount} desa</span>
               </button>
               <button
                 onClick={() => onPartyFilterChange?.(partyFilter === 'below50' ? null : 'below50')}
                 className={`flex items-center justify-between w-full px-3 py-2 rounded-lg text-xs font-semibold transition-all border ${
                   partyFilter === 'below50'
-                    ? 'bg-red-600 text-stone-900 border-red-400 shadow-lg shadow-red-900/40'
-                    : 'bg-red-500/10 text-red-300 border-red-500/30 hover:bg-red-500/20'
+                    ? 'bg-red-600 text-white border-red-600 shadow-md'
+                    : 'bg-red-50 text-red-600 border-red-200 hover:bg-red-100'
                 }`}
               >
                 <span>▼ Di bawah 50%</span>
-                <span className="bg-red-900/60 px-2 py-0.5 rounded-full">{belowCount} desa</span>
+                <span className={`px-2 py-0.5 rounded-full ${partyFilter === 'below50' ? 'bg-red-800 text-white' : 'bg-red-200 text-red-800'}`}>{belowCount} desa</span>
               </button>
             </div>
 
