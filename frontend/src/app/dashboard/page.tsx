@@ -301,6 +301,11 @@ export default function Dashboard() {
       const props = f.properties;
       if (!props) return;
       
+      const pemiluData = props[selectedPemilu] || props[selectedPemilu.toUpperCase()];
+      if (!pemiluData) return; // Skip features that don't belong to the selected election year
+      
+      const electionData = pemiluData[selectedElection] || pemiluData[selectedElection.toUpperCase()];
+
       let tpsRaw: any = null;
       if (selectedPemilu.includes('2019')) {
         tpsRaw = getProp(props, 'jumlah_tps_2019') || getProp(props, 'tps_2019');
@@ -308,10 +313,11 @@ export default function Dashboard() {
         tpsRaw = getProp(props, 'jumlah_tps_2024') || getProp(props, 'tps_2024');
       }
 
-      const pemiluData = props[selectedPemilu] || props[selectedPemilu.toUpperCase()];
-      
+      if (!tpsRaw && electionData) {
+        tpsRaw = electionData.jumlah_tps || electionData.JUMLAH_TPS || electionData.tps || electionData.TPS;
+      }
       if (!tpsRaw && pemiluData) {
-        tpsRaw = pemiluData.jumlah_tps || pemiluData.JUMLAH_TPS;
+        tpsRaw = pemiluData.jumlah_tps || pemiluData.JUMLAH_TPS || pemiluData.tps || pemiluData.TPS;
       }
       if (!tpsRaw) {
         tpsRaw = getProp(props, 'jumlah_tps');
@@ -320,18 +326,15 @@ export default function Dashboard() {
       const tps = parseInt(tpsRaw || '0', 10);
       if (!isNaN(tps)) result.total_tps += tps;
 
-      if (pemiluData) {
-        const electionData = pemiluData[selectedElection] || pemiluData[selectedElection.toUpperCase()];
-        if (electionData) {
-          result.total_suara_sah += (electionData.total_suara_sah || 0);
+      if (pemiluData && electionData) {
+        result.total_suara_sah += (electionData.total_suara_sah || 0);
           
-          if (electionData.calon) {
-            Object.entries(electionData.calon).forEach(([nama, suara]) => {
-              const val = Number(suara) || 0;
-              if (!result.calon[nama]) result.calon[nama] = 0;
-              result.calon[nama] += val;
-            });
-          }
+        if (electionData.calon) {
+          Object.entries(electionData.calon).forEach(([nama, suara]) => {
+            const val = Number(suara) || 0;
+            if (!result.calon[nama]) result.calon[nama] = 0;
+            result.calon[nama] += val;
+          });
         }
       }
     });
@@ -440,7 +443,8 @@ export default function Dashboard() {
     const feature = geoData.features.find((f: any) => {
       const d = getProp(f.properties, 'desa');
       const k = getProp(f.properties, 'kecamatan');
-      return d === pfiClickedDesa.desa && k === pfiClickedDesa.kec;
+      const hasPemilu = !!(f.properties[selectedPemilu] || f.properties[selectedPemilu.toUpperCase()]);
+      return d === pfiClickedDesa.desa && k === pfiClickedDesa.kec && hasPemilu;
     });
     if (!feature) return null;
 
