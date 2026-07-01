@@ -301,10 +301,25 @@ export default function Dashboard() {
       const props = f.properties;
       if (!props) return;
       
-      const tps = parseInt(getProp(props, 'jumlah_tps') || '0', 10);
-      if (!isNaN(tps)) result.total_tps += tps;
+      let tpsRaw: any = null;
+      if (selectedPemilu.includes('2019')) {
+        tpsRaw = getProp(props, 'jumlah_tps_2019') || getProp(props, 'tps_2019');
+      } else if (selectedPemilu.includes('2024')) {
+        tpsRaw = getProp(props, 'jumlah_tps_2024') || getProp(props, 'tps_2024');
+      }
 
       const pemiluData = props[selectedPemilu] || props[selectedPemilu.toUpperCase()];
+      
+      if (!tpsRaw && pemiluData) {
+        tpsRaw = pemiluData.jumlah_tps || pemiluData.JUMLAH_TPS;
+      }
+      if (!tpsRaw) {
+        tpsRaw = getProp(props, 'jumlah_tps');
+      }
+
+      const tps = parseInt(tpsRaw || '0', 10);
+      if (!isNaN(tps)) result.total_tps += tps;
+
       if (pemiluData) {
         const electionData = pemiluData[selectedElection] || pemiluData[selectedElection.toUpperCase()];
         if (electionData) {
