@@ -25,14 +25,20 @@ const ELECTION_ORDER = ['PPWP', 'DPD', 'DPR RI', 'DPRD PROVINSI', 'DPRD KABUPATE
 
 // Ambil kandidat names dari candidate_names lookup atau dari calon dict biasa
 function getCandidateNames(geoData: any, pemiluKey: string, election: string): string[] {
-  // 1. Cek root-level candidate_names (dari fetchAllLayers yang sudah diperbaiki)
-  if (geoData?.candidate_names?.[pemiluKey]?.[election]) {
-    return geoData.candidate_names[pemiluKey][election];
+  // 1. Cek root-level candidate_names
+  if (geoData?.candidate_names) {
+    const key = Object.keys(geoData.candidate_names).find(k => k.toLowerCase() === pemiluKey.toLowerCase());
+    if (key && geoData.candidate_names[key]?.[election]) {
+      return geoData.candidate_names[key][election];
+    }
   }
-  // 2. Fallback: cek _cn yang di-embed di feature pertama (compressed format)
+  // 2. Fallback: cek _cn yang di-embed di feature pertama
   const firstFeat = geoData?.features?.[0];
-  if (firstFeat?.properties?.[pemiluKey]?._cn?.[election]) {
-    return firstFeat.properties[pemiluKey]._cn[election];
+  if (firstFeat?.properties) {
+    const propKey = Object.keys(firstFeat.properties).find(k => k.toLowerCase() === pemiluKey.toLowerCase());
+    if (propKey && firstFeat.properties[propKey]?._cn?.[election]) {
+      return firstFeat.properties[propKey]._cn[election];
+    }
   }
   return [];
 }
@@ -215,8 +221,8 @@ export default function Dashboard() {
         // Bangun lookup desa__kec → suara_per_tps
         const tpsLookup: Record<string, any[]> = {};
         (json.features || []).forEach((feat: any) => {
-          const d = (feat.properties?.desa || '').toUpperCase();
-          const k = (feat.properties?.kecamatan || '').toUpperCase();
+          const d = (feat.properties?.desa || '').toUpperCase().trim();
+          const k = (feat.properties?.kecamatan || '').toUpperCase().trim();
           if (d && k && feat.properties?.suara_per_tps) {
             tpsLookup[`${d}__${k}`] = feat.properties.suara_per_tps;
           }
@@ -224,8 +230,8 @@ export default function Dashboard() {
 
         // Inject suara_per_tps ke setiap feature yang cocok
         allFeatures = allFeatures.map((feat: any) => {
-          const d = (getProp(feat.properties, 'desa') || '').toUpperCase();
-          const k = (getProp(feat.properties, 'kecamatan') || '').toUpperCase();
+          const d = (getProp(feat.properties, 'desa') || '').toUpperCase().trim();
+          const k = (getProp(feat.properties, 'kecamatan') || '').toUpperCase().trim();
           const tpsList = tpsLookup[`${d}__${k}`];
           if (!tpsList) return feat;
 
@@ -486,9 +492,9 @@ export default function Dashboard() {
     );
     if (!feature) return null;
 
-    // Gunakan fallback toUpperCase() seperti aggregatedData
-    const pemiluData = feature.properties[selectedPemilu]
-      || feature.properties[selectedPemilu.toUpperCase()];
+    // Gunakan fallback case-insensitive lookup
+    const pKey = Object.keys(feature.properties).find(k => k.toLowerCase() === selectedPemilu.toLowerCase()) || selectedPemilu;
+    const pemiluData = feature.properties[pKey];
     if (!pemiluData) return null;
 
     const tpsList: any[] = pemiluData.suara_per_tps || [];
@@ -532,7 +538,8 @@ export default function Dashboard() {
       const props = f.properties;
       if (!props) return;
 
-      const pemiluData = props[selectedPemilu] || props[selectedPemilu.toUpperCase()];
+      const pKey = Object.keys(props).find(k => k.toLowerCase() === selectedPemilu.toLowerCase()) || selectedPemilu;
+      const pemiluData = props[pKey];
       if (!pemiluData) return;
 
       // Ambil nama calon dari lookup (compressed) atau dari dict biasa
@@ -607,7 +614,8 @@ export default function Dashboard() {
         if (kec !== selectedKec) return;
       }
 
-      const pemiluData = f.properties[selectedPemilu];
+      const pKey = Object.keys(f.properties).find(k => k.toLowerCase() === selectedPemilu.toLowerCase()) || selectedPemilu;
+      const pemiluData = f.properties[pKey];
       if (!pemiluData) return;
       const electionRaw = pemiluData[selectedElection] || pemiluData[selectedElection?.toUpperCase?.()];
       const elecDecoded = decodeElectionData(electionRaw, candidateNames);
@@ -639,7 +647,8 @@ export default function Dashboard() {
         if (kec !== selectedKec) return;
       }
 
-      const pemiluData = f.properties[selectedPemilu];
+      const pKey = Object.keys(f.properties).find(k => k.toLowerCase() === selectedPemilu.toLowerCase()) || selectedPemilu;
+      const pemiluData = f.properties[pKey];
       if (!pemiluData) return;
       const electionRaw = pemiluData[selectedElection] || pemiluData[selectedElection?.toUpperCase?.()];
       const elecDecoded = decodeElectionData(electionRaw, candidateNames);
@@ -689,7 +698,8 @@ export default function Dashboard() {
     if (!feature) return null;
 
     const props = feature.properties;
-    const pemiluData = props[selectedPemilu];
+    const pKey = Object.keys(props).find(k => k.toLowerCase() === selectedPemilu.toLowerCase()) || selectedPemilu;
+    const pemiluData = props[pKey];
     if (!pemiluData) return null;
     const electionRaw = pemiluData[selectedElection] || pemiluData[selectedElection?.toUpperCase?.()];
     const candidateNames = getCandidateNames(geoData, selectedPemilu, selectedElection);
