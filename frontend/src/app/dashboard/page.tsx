@@ -138,23 +138,27 @@ export default function Dashboard() {
   // ─── Uploaded Layers State ─────────────────────────────────────────────
   interface LayerEntry { id: string; name: string; }
   const [uploadedLayers, setUploadedLayers] = useState<LayerEntry[]>([]);
+  const [tpsLayers, setTpsLayers]           = useState<LayerEntry[]>([]); // ← file TPS terpisah
   const [kelolaDataOpen, setKelolaDataOpen] = useState(false);
-  const [isUploading, setIsUploading] = useState(false);
+  const [isUploading, setIsUploading]       = useState(false);
+  const [isUploadingTps, setIsUploadingTps] = useState(false);
 
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  const fileInputRef    = useRef<HTMLInputElement>(null);
+  const tpsFileInputRef = useRef<HTMLInputElement>(null); // ← input file TPS
   const router = useRouter();
 
   // ─── Load last active layers on mount ─────────────────────────────────
   useEffect(() => {
     let storedLayers: LayerEntry[] = [];
-    const multiRaw = localStorage.getItem('active_layer_entries');
+    let storedTpsLayers: LayerEntry[] = [];
+    const multiRaw    = localStorage.getItem('active_layer_entries');
+    const tpsRaw      = localStorage.getItem('tps_layer_entries');
     const legacyMultiIds = localStorage.getItem('active_layer_ids');
     const legacySingleId = localStorage.getItem('active_layer_id');
 
     if (multiRaw) {
       try { storedLayers = JSON.parse(multiRaw); } catch (e) { console.error('Gagal parsing active_layer_entries', e); }
     } else if (legacyMultiIds) {
-      // Migrate from old format
       try {
         const ids: string[] = JSON.parse(legacyMultiIds);
         storedLayers = ids.map((id, i) => ({ id, name: `Layer ${i + 1}` }));
@@ -168,31 +172,75 @@ export default function Dashboard() {
       localStorage.removeItem('active_layer_id');
     }
 
+    if (tpsRaw) {
+      try { storedTpsLayers = JSON.parse(tpsRaw); } catch (e) { console.error('Gagal parsing tps_layer_entries', e); }
+    }
+
+    if (storedTpsLayers.length > 0) setTpsLayers(storedTpsLayers);
+
     if (storedLayers.length > 0) {
       setUploadedLayers(storedLayers);
-      fetchAllLayers(storedLayers.map(l => l.id));
+      fetchAllLayers(storedLayers.map(l => l.id), storedTpsLayers.map(l => l.id));
     }
   }, []);
 
   const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
 
-  const fetchAllLayers = async (layerIds: string[]) => {
+  // layerIds = peta utama; tpsLayerIds = file TPS terpisah
+  const fetchAllLayers = async (layerIds: string[], tpsLayerIds: string[] = []) => {
     try {
       let allFeatures: any[] = [];
       let mergedCandidateNames: any = {};
+
+      // ── Phase 1: Muat layer peta utama ──────────────────────────────────
       for (const id of layerIds) {
         const res = await fetch(`${API_URL}/geojson/layer/${id}`);
         if (res.ok) {
           const json = await res.json();
-          if (json.features) {
-            allFeatures = [...allFeatures, ...json.features];
-          }
-          // ── Pertahankan candidate_names dari GeoJSON compressed ──
-          if (json.candidate_names) {
-            mergedCandidateNames = { ...mergedCandidateNames, ...json.candidate_names };
-          }
+          if (json.features) allFeatures = [...allFeatures, ...json.features];
+          if (json.candidate_names) mergedCandidateNames = { ...mergedCandidateNames, ...json.candidate_names };
         }
       }
+
+      // ── Phase 2: Muat layer TPS dan merge ke features peta ───────────────
+      for (const id of tpsLayerIds) {
+        const res = await fetch(`${API_URL}/geojson/layer/${id}`);
+        if (!res.ok) continue;
+        const json = await res.json();
+        if (json._data_type !== 'tps_suara') continue;
+
+        const pemiluKey: string = json.pemilu_key || 'pemilu_2024';
+        if (json.candidate_names) mergedCandidateNames = { ...mergedCandidateNames, ...json.candidate_names };
+
+        // Bangun lookup desa__kec → suara_per_tps
+        const tpsLookup: Record<string, any[]> = {};
+        (json.features || []).forEach((feat: any) => {
+          const d = (feat.properties?.desa || '').toUpperCase();
+          const k = (feat.properties?.kecamatan || '').toUpperCase();
+          if (d && k && feat.properties?.suara_per_tps) {
+            tpsLookup[`${d}__${k}`] = feat.properties.suara_per_tps;
+          }
+        });
+
+        // Inject suara_per_tps ke setiap feature yang cocok
+        allFeatures = allFeatures.map((feat: any) => {
+          const d = (getProp(feat.properties, 'desa') || '').toUpperCase();
+          const k = (getProp(feat.properties, 'kecamatan') || '').toUpperCase();
+          const tpsList = tpsLookup[`${d}__${k}`];
+          if (!tpsList) return feat;
+          return {
+            ...feat,
+            properties: {
+              ...feat.properties,
+              [pemiluKey]: {
+                ...(feat.properties[pemiluKey] || {}),
+                suara_per_tps: tpsList
+              }
+            }
+          };
+        });
+      }
+
       setGeoData({
         type: 'FeatureCollection',
         features: allFeatures,
@@ -263,7 +311,7 @@ export default function Dashboard() {
       setSelectedKec(null);
       setHighlightedKec(null);
       setHighlightedDesa(null);
-      fetchAllLayers(newLayers.map(l => l.id));
+      fetchAllLayers(newLayers.map(l => l.id), tpsLayers.map(l => l.id));
 
     } catch (err: any) {
       alert(`Error: ${err.message}`);
@@ -282,10 +330,62 @@ export default function Dashboard() {
     setHighlightedKec(null);
     setHighlightedDesa(null);
     if (newLayers.length > 0) {
-      fetchAllLayers(newLayers.map(l => l.id));
+      fetchAllLayers(newLayers.map(l => l.id), tpsLayers.map(l => l.id));
     } else {
       setGeoData(null);
     }
+  };
+
+  // ─── Upload file TPS terpisah ────────────────────────────────────────────
+  const handleTpsFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const token = localStorage.getItem('token');
+    if (!token) { alert('Sesi habis. Silakan login.'); router.push('/login'); return; }
+    if (file.size > 4 * 1024 * 1024) {
+      alert('File TPS terlalu besar (> 4 MB).');
+      return;
+    }
+
+    const formData = new FormData();
+    formData.append('file', file);
+    setIsUploadingTps(true);
+    try {
+      const res = await fetch(`${API_URL}/geojson/upload`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}` },
+        body: formData,
+      });
+      if (res.status === 401) {
+        localStorage.removeItem('token');
+        router.push('/login');
+        return;
+      }
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.message || 'Gagal upload TPS');
+
+      const newEntry: LayerEntry = { id: data.layerId, name: file.name };
+      const newTpsLayers = [...tpsLayers, newEntry];
+      setTpsLayers(newTpsLayers);
+      localStorage.setItem('tps_layer_entries', JSON.stringify(newTpsLayers));
+
+      // Re-fetch semua layer termasuk TPS baru
+      await fetchAllLayers(uploadedLayers.map(l => l.id), newTpsLayers.map(l => l.id));
+    } catch (err: any) {
+      alert(`Error TPS: ${err.message}`);
+    } finally {
+      setIsUploadingTps(false);
+    }
+    e.target.value = '';
+  };
+
+  const handleRemoveTpsLayer = (layerId: string) => {
+    const newTpsLayers = tpsLayers.filter(l => l.id !== layerId);
+    setTpsLayers(newTpsLayers);
+    localStorage.setItem('tps_layer_entries', JSON.stringify(newTpsLayers));
+    // Re-fetch tanpa layer TPS yang dihapus
+    fetchAllLayers(uploadedLayers.map(l => l.id), newTpsLayers.map(l => l.id));
   };
 
   const handleLogout = () => {
@@ -300,8 +400,10 @@ export default function Dashboard() {
   const handleClearData = () => {
     if (confirm('Apakah Anda yakin ingin menghapus semua layer dari tampilan peta?')) {
       setUploadedLayers([]);
+      setTpsLayers([]);
       setGeoData(null);
       localStorage.removeItem('active_layer_entries');
+      localStorage.removeItem('tps_layer_entries');
       localStorage.removeItem('active_layer_ids');
       localStorage.removeItem('active_layer_id');
       setSelectedKec(null);
@@ -745,15 +847,24 @@ export default function Dashboard() {
 
 
           {/* ── Import & Kelola Data ── */}
+          {/* File GeoJSON utama (peta desa + ringkasan pemilu) */}
           <input type="file" accept=".geojson,.json" className="hidden" ref={fileInputRef} onChange={handleFileUpload} />
-          <SidebarItem 
-            icon={isUploading ? <Loader2 size={20} className="animate-spin text-stone-400" /> : <UploadCloud size={20} />} 
-            label={isUploading ? "Mengunggah..." : "Import Data"} 
-            onClick={() => !isUploading && fileInputRef.current?.click()} 
+          <SidebarItem
+            icon={isUploading ? <Loader2 size={20} className="animate-spin text-stone-400" /> : <UploadCloud size={20} />}
+            label={isUploading ? "Mengunggah..." : "Import Peta Pemilu"}
+            onClick={() => !isUploading && fileInputRef.current?.click()}
+          />
+
+          {/* File TPS terpisah (suara per TPS) */}
+          <input type="file" accept=".geojson,.json" className="hidden" ref={tpsFileInputRef} onChange={handleTpsFileUpload} />
+          <SidebarItem
+            icon={isUploadingTps ? <Loader2 size={20} className="animate-spin text-blue-400" /> : <UploadCloud size={20} className="text-blue-500" />}
+            label={isUploadingTps ? "Mengunggah TPS..." : "Import Data TPS"}
+            onClick={() => !isUploadingTps && tpsFileInputRef.current?.click()}
           />
 
           {/* Kelola Data – daftar file yang sudah terupload */}
-          {uploadedLayers.length > 0 && (
+          {(uploadedLayers.length > 0 || tpsLayers.length > 0) && (
             <>
               <button
                 onClick={() => setKelolaDataOpen(!kelolaDataOpen)}
@@ -765,36 +876,69 @@ export default function Dashboard() {
               >
                 <Database size={20} className="shrink-0 transition-transform group-hover:scale-110" />
                 <span className="font-medium text-sm flex-1 text-left">Kelola Data</span>
-                <span className="text-xs bg-red-100 text-red-600 px-1.5 py-0.5 rounded-full mr-1">{uploadedLayers.length}</span>
+                <span className="text-xs bg-red-100 text-red-600 px-1.5 py-0.5 rounded-full mr-1">
+                  {uploadedLayers.length + tpsLayers.length}
+                </span>
                 {kelolaDataOpen ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
               </button>
 
               {kelolaDataOpen && (
                 <div className="ml-3 border-l border-stone-300 pl-2 space-y-1">
-                  <p className="px-3 py-1.5 text-[10px] text-stone-500 uppercase tracking-wider font-bold">File yang aktif</p>
-                  {uploadedLayers.map((layer, idx) => (
-                    <div
-                      key={layer.id}
-                      className="flex items-center gap-2 px-3 py-2 rounded-md bg-stone-100/40 border border-stone-300/40 group/item"
-                    >
-                      <div className="w-5 h-5 rounded shrink-0 bg-red-100 flex items-center justify-center">
-                        <span className="text-[9px] font-bold text-red-600">{idx + 1}</span>
-                      </div>
-                      <span
-                        className="flex-1 text-xs text-stone-700 truncate"
-                        title={layer.name}
-                      >
-                        {layer.name.replace(/\.(geojson|json)$/i, '')}
-                      </span>
-                      <button
-                        onClick={() => handleRemoveLayer(layer.id)}
-                        title="Hapus layer ini"
-                        className="shrink-0 p-1 rounded text-zinc-600 hover:text-red-600 hover:bg-red-500/10 transition-all opacity-0 group-hover/item:opacity-100"
-                      >
-                        <Trash2 size={12} />
-                      </button>
-                    </div>
-                  ))}
+
+                  {/* ─ File Peta Utama ─ */}
+                  {uploadedLayers.length > 0 && (
+                    <>
+                      <p className="px-3 py-1.5 text-[10px] text-stone-500 uppercase tracking-wider font-bold">Peta Pemilu</p>
+                      {uploadedLayers.map((layer, idx) => (
+                        <div
+                          key={layer.id}
+                          className="flex items-center gap-2 px-3 py-2 rounded-md bg-stone-100/40 border border-stone-300/40 group/item"
+                        >
+                          <div className="w-5 h-5 rounded shrink-0 bg-red-100 flex items-center justify-center">
+                            <span className="text-[9px] font-bold text-red-600">{idx + 1}</span>
+                          </div>
+                          <span className="flex-1 text-xs text-stone-700 truncate" title={layer.name}>
+                            {layer.name.replace(/\.(geojson|json)$/i, '')}
+                          </span>
+                          <button
+                            onClick={() => handleRemoveLayer(layer.id)}
+                            title="Hapus layer ini"
+                            className="shrink-0 p-1 rounded text-zinc-600 hover:text-red-600 hover:bg-red-500/10 transition-all opacity-0 group-hover/item:opacity-100"
+                          >
+                            <Trash2 size={12} />
+                          </button>
+                        </div>
+                      ))}
+                    </>
+                  )}
+
+                  {/* ─ File TPS ─ */}
+                  {tpsLayers.length > 0 && (
+                    <>
+                      <p className="px-3 py-1.5 text-[10px] text-blue-500 uppercase tracking-wider font-bold">Data TPS</p>
+                      {tpsLayers.map((layer, idx) => (
+                        <div
+                          key={layer.id}
+                          className="flex items-center gap-2 px-3 py-2 rounded-md bg-blue-50/50 border border-blue-200/60 group/item"
+                        >
+                          <div className="w-5 h-5 rounded shrink-0 bg-blue-100 flex items-center justify-center">
+                            <span className="text-[9px] font-bold text-blue-600">{idx + 1}</span>
+                          </div>
+                          <span className="flex-1 text-xs text-stone-700 truncate" title={layer.name}>
+                            {layer.name.replace(/\.(geojson|json)$/i, '')}
+                          </span>
+                          <button
+                            onClick={() => handleRemoveTpsLayer(layer.id)}
+                            title="Hapus layer TPS ini"
+                            className="shrink-0 p-1 rounded text-zinc-600 hover:text-red-600 hover:bg-red-500/10 transition-all opacity-0 group-hover/item:opacity-100"
+                          >
+                            <Trash2 size={12} />
+                          </button>
+                        </div>
+                      ))}
+                    </>
+                  )}
+
                   <button
                     onClick={handleClearData}
                     className="w-full mt-1 flex items-center gap-2 px-3 py-1.5 rounded-md text-red-600/70 hover:text-red-600 hover:bg-red-500/10 transition-all text-xs"
