@@ -196,15 +196,25 @@ export default function Dashboard() {
   const fetchAllLayers = async (layerIds: string[], tpsLayerIds: string[] = []) => {
     try {
       let allFeatures: any[] = [];
-      let mergedCandidateNames: any = {};
+      let mergedCandidateNames: Record<string, any> = {};
+
+      // Baca metadata dari localStorage untuk mengatasi masalah backend yang menghilangkan properti root
+      let savedMetadata: Record<string, any> = {};
+      try {
+        const str = localStorage.getItem('layer_metadata');
+        if (str) savedMetadata = JSON.parse(str);
+      } catch (e) {}
 
       // ── Phase 1: Muat layer peta utama ──────────────────────────────────
       for (const id of layerIds) {
         const res = await fetch(`${API_URL}/geojson/layer/${id}`);
         if (res.ok) {
           const json = await res.json();
+          const meta = savedMetadata[id] || {};
           if (json.features) allFeatures = [...allFeatures, ...json.features];
-          if (json.candidate_names) mergedCandidateNames = { ...mergedCandidateNames, ...json.candidate_names };
+          
+          const cn = meta.candidate_names || json.candidate_names;
+          if (cn) mergedCandidateNames = { ...mergedCandidateNames, ...cn };
         }
       }
 
@@ -213,10 +223,13 @@ export default function Dashboard() {
         const res = await fetch(`${API_URL}/geojson/layer/${id}`);
         if (!res.ok) continue;
         const json = await res.json();
-        if (json._data_type !== 'tps_suara') continue;
-
-        const pemiluKey: string = json.pemilu_key || 'pemilu_2024';
-        if (json.candidate_names) mergedCandidateNames = { ...mergedCandidateNames, ...json.candidate_names };
+        
+        // Cek metadata lokal atau fallback
+        const meta = savedMetadata[id] || {};
+        
+        const pemiluKey: string = meta.pemilu_key || json.pemilu_key || 'pemilu_2024';
+        const cn = meta.candidate_names || json.candidate_names;
+        if (cn) mergedCandidateNames = { ...mergedCandidateNames, ...cn };
 
         // Bangun lookup desa__kec → suara_per_tps
         const tpsLookup: Record<string, any[]> = {};
@@ -323,6 +336,22 @@ export default function Dashboard() {
       setUploadedLayers(newLayers);
       localStorage.setItem('active_layer_entries', JSON.stringify(newLayers));
 
+      // Parse metadata lokal karena backend membuangnya
+      try {
+        const fileText = await file.text();
+        const metaJson = JSON.parse(fileText);
+        let savedMeta: Record<string, any> = {};
+        try { savedMeta = JSON.parse(localStorage.getItem('layer_metadata') || '{}'); } catch(e){}
+        savedMeta[data.layerId] = {
+          candidate_names: metaJson.candidate_names,
+          pemilu_key: metaJson.pemilu_key,
+          _data_type: metaJson._data_type
+        };
+        localStorage.setItem('layer_metadata', JSON.stringify(savedMeta));
+      } catch (err) {
+        console.error('Gagal menyimpan metadata layer lokal', err);
+      }
+
       // Reset state kecamatan/desa lama sebelum load data baru
       setSelectedKec(null);
       setHighlightedKec(null);
@@ -385,6 +414,22 @@ export default function Dashboard() {
       const newTpsLayers = [...tpsLayers, newEntry];
       setTpsLayers(newTpsLayers);
       localStorage.setItem('tps_layer_entries', JSON.stringify(newTpsLayers));
+
+      // Parse metadata lokal karena backend membuangnya
+      try {
+        const fileText = await file.text();
+        const metaJson = JSON.parse(fileText);
+        let savedMeta: Record<string, any> = {};
+        try { savedMeta = JSON.parse(localStorage.getItem('layer_metadata') || '{}'); } catch(e){}
+        savedMeta[data.layerId] = {
+          candidate_names: metaJson.candidate_names,
+          pemilu_key: metaJson.pemilu_key,
+          _data_type: metaJson._data_type
+        };
+        localStorage.setItem('layer_metadata', JSON.stringify(savedMeta));
+      } catch (err) {
+        console.error('Gagal menyimpan metadata TPS lokal', err);
+      }
 
       // Re-fetch semua layer termasuk TPS baru
       await fetchAllLayers(uploadedLayers.map(l => l.id), newTpsLayers.map(l => l.id));
@@ -486,16 +531,24 @@ export default function Dashboard() {
     // Tidak perlu selectedElection — TPS list sama untuk semua jenis pemilu
     if (!highlightedDesa || !selectedKec || selectedKec === 'ALL' || !selectedPemilu || !geoData?.features) return null;
 
-    const feature = geoData.features.find((f: any) =>
+    // Cari feature yang memiliki property pemilu_key (antisipasi jika ada duplicate/multi layers)
+    const targetFeatures = geoData.features.filter((f: any) =>
       getProp(f.properties, 'desa') === highlightedDesa &&
       getProp(f.properties, 'kecamatan') === selectedKec
     );
-    if (!feature) return null;
+    if (targetFeatures.length === 0) return null;
 
-    // Gunakan fallback case-insensitive lookup
-    const pKey = Object.keys(feature.properties).find(k => k.toLowerCase() === selectedPemilu.toLowerCase()) || selectedPemilu;
-    const pemiluData = feature.properties[pKey];
-    if (!pemiluData) return null;
+    let finalPemiluData = null;
+    for (const f of targetFeatures) {
+      const pKey = Object.keys(f.properties).find(k => k.toLowerCase() === selectedPemilu.toLowerCase()) || selectedPemilu;
+      if (f.properties[pKey]) {
+        finalPemiluData = f.properties[pKey];
+        break; // Ditemukan feature yg punya data pemilu valid
+      }
+    }
+    if (!finalPemiluData) return null;
+
+    const pemiluData = finalPemiluData;
 
     const tpsList: any[] = pemiluData.suara_per_tps || [];
     if (tpsList.length === 0) return [];   // return [] agar UI bisa tampilkan pesan
