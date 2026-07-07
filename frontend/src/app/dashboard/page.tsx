@@ -228,12 +228,22 @@ export default function Dashboard() {
           const k = (getProp(feat.properties, 'kecamatan') || '').toUpperCase();
           const tpsList = tpsLookup[`${d}__${k}`];
           if (!tpsList) return feat;
+
+          // Cari actual key di properties agar tidak duplicate dengan beda case (misal 'PEMILU_2024' vs 'pemilu_2024')
+          let actualKey = pemiluKey;
+          for (const key of Object.keys(feat.properties)) {
+            if (key.toLowerCase() === pemiluKey.toLowerCase()) {
+              actualKey = key;
+              break;
+            }
+          }
+
           return {
             ...feat,
             properties: {
               ...feat.properties,
-              [pemiluKey]: {
-                ...(feat.properties[pemiluKey] || {}),
+              [actualKey]: {
+                ...(feat.properties[actualKey] || {}),
                 suara_per_tps: tpsList
               }
             }
