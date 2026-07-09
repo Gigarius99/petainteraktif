@@ -574,82 +574,134 @@ export default function Dashboard() {
   const aggregatedData = useMemo(() => {
     if (!selectedPemilu || !selectedElection || !geoData?.features) return null;
 
-    let targetFeatures: any[] = [];
-    if (highlightedDesa && selectedKec && selectedKec !== 'ALL') {
-      targetFeatures = geoData.features.filter((f: any) =>
-        getProp(f.properties, 'desa') === highlightedDesa &&
-        getProp(f.properties, 'kecamatan') === selectedKec
-      );
-    } else if (selectedKec && selectedKec !== 'ALL') {
-      targetFeatures = desaByKec[selectedKec] || [];
-    } else if (selectedKec === 'ALL') {
-      targetFeatures = geoData.features;
-    } else {
-      return null;
-    }
-
-    if (targetFeatures.length === 0) return null;
-
+    const candidateNames = getCandidateNames(geoData, selectedPemilu, selectedElection);
     const result = {
       total_tps: 0,
       total_suara_sah: 0,
       calon: {} as Record<string, number>
     };
 
-    // ── Mode TPS Spesifik: proses HANYA feature pertama yang punya suara_per_tps valid ──
-    // Ini mencegah double-counting jika ada feature duplikat akibat multi-upload.
-    const isDesaView = highlightedDesa && selectedKec && selectedKec !== 'ALL';
-    if (selectedTPS !== null && isDesaView) {
-      const candidateNames = getCandidateNames(geoData, selectedPemilu, selectedElection);
-      for (const f of targetFeatures) {
+    // ═══════════════════════════════════════════════════════════════════════
+    // DESA VIEW — satu desa dipilih (highlightedDesa)
+    // Semua kalkulasi dari suara_per_tps agar konsisten antara Semua & per-TPS
+    // ═══════════════════════════════════════════════════════════════════════
+    if (highlightedDesa && selectedKec && selectedKec !== 'ALL') {
+      // Cari semua feature untuk desa ini (bisa lebih dari 1 jika multi-upload)
+      const allDesaFeatures = geoData.features.filter((f: any) =>
+        getProp(f.properties, 'desa') === highlightedDesa &&
+        getProp(f.properties, 'kecamatan') === selectedKec
+      );
+      if (allDesaFeatures.length === 0) return null;
+
+      // Cari feature PERTAMA yang punya data pemilu yang dipilih
+      // Prioritaskan feature yang punya suara_per_tps
+      let pemiluData: any = null;
+      for (const f of allDesaFeatures) {
         const props = f.properties;
         if (!props) continue;
         const pKey = Object.keys(props).find(k => k.toLowerCase() === selectedPemilu.toLowerCase()) || selectedPemilu;
-        const pemiluData = props[pKey];
-        if (!pemiluData?.suara_per_tps?.length) continue; // skip feature tanpa data TPS
+        const pd = props[pKey];
+        if (!pd) continue;
+        // Prioritas: feature yang punya suara_per_tps
+        if (pd.suara_per_tps?.length > 0) { pemiluData = pd; break; }
+        // Fallback: simpan kandidat pertama yang valid (belum ada suara_per_tps)
+        if (!pemiluData) pemiluData = pd;
+      }
+      if (!pemiluData) return null;
 
-        const rawEntry = (pemiluData.suara_per_tps || []).find((t: any) => getTpsNo(t) === selectedTPS);
+      const tpsList: any[] = pemiluData.suara_per_tps || [];
+
+      // ── PER-TPS MODE ──
+      if (selectedTPS !== null) {
+        const rawEntry = tpsList.find((t: any) => getTpsNo(t) === selectedTPS);
         if (rawEntry) {
           const decoded = decodeTpsEntry(rawEntry, selectedElection, candidateNames);
           if (decoded) {
             result.total_tps = 1;
-            result.total_suara_sah = decoded.total_suara_sah; // langsung assign, bukan +=
+            result.total_suara_sah = decoded.total_suara_sah;
             Object.entries(decoded.calon).forEach(([nama, suara]) => {
-              result.calon[nama] = suara as number; // langsung assign, bukan +=
+              result.calon[nama] = suara as number;
             });
           }
         }
-        break; // Hanya proses feature PERTAMA yang valid — cegah double-counting
+        const sortedCalon = Object.entries(result.calon).sort((a, b) => b[1] - a[1]);
+        return { ...result, sortedCalon, regionName: `TPS ${selectedTPS} — ${highlightedDesa}` };
+      }
+
+      // ── SEMUA TPS MODE (desa) ──
+      if (tpsList.length > 0) {
+        // Hitung dari suara_per_tps agar konsisten dengan tampilan per-TPS
+        result.total_tps = tpsList.length;
+        for (const entry of tpsList) {
+          const decoded = decodeTpsEntry(entry, selectedElection, candidateNames);
+          if (decoded) {
+            result.total_suara_sah += decoded.total_suara_sah;
+            Object.entries(decoded.calon).forEach(([nama, suara]) => {
+              if (!result.calon[nama]) result.calon[nama] = 0;
+              result.calon[nama] += suara as number;
+            });
+          }
+        }
+      } else {
+        // Tidak ada data TPS — fallback ke aggregate summary di Main file
+        const electionRaw = pemiluData[selectedElection] || pemiluData[selectedElection.toUpperCase()];
+        const elecDecoded = decodeElectionData(electionRaw, candidateNames);
+        if (elecDecoded) {
+          result.total_suara_sah = elecDecoded.total_suara_sah;
+          Object.entries(elecDecoded.calon).forEach(([nama, suara]) => {
+            result.calon[nama] = suara as number;
+          });
+        }
+        const tpsRaw = pemiluData.jumlah_tps || pemiluData.JUMLAH_TPS ||
+          getProp(allDesaFeatures[0]?.properties, 'jumlah_tps') || 0;
+        result.total_tps = typeof tpsRaw === 'number' ? tpsRaw : parseInt(tpsRaw, 10) || 0;
       }
 
       const sortedCalon = Object.entries(result.calon).sort((a, b) => b[1] - a[1]);
-      let regionName = `TPS ${selectedTPS} — ${highlightedDesa}`;
-      return { ...result, sortedCalon, regionName };
+      return { ...result, sortedCalon, regionName: `Desa ${highlightedDesa}, Kec. ${selectedKec}` };
     }
 
+    // ═══════════════════════════════════════════════════════════════════════
+    // KECAMATAN / SELURUH VIEW
+    // Deduplikasi per desa+kec agar tidak double-count dari multi-upload
+    // ═══════════════════════════════════════════════════════════════════════
+    let targetFeatures: any[] = [];
+    if (selectedKec && selectedKec !== 'ALL') {
+      targetFeatures = geoData.features.filter((f: any) =>
+        getProp(f.properties, 'kecamatan') === selectedKec
+      );
+    } else if (selectedKec === 'ALL') {
+      targetFeatures = geoData.features;
+    } else {
+      return null;
+    }
+    if (targetFeatures.length === 0) return null;
+
+    // Track desa yang sudah diproses — HANYA proses 1 feature per desa+kec
+    const seenDesas = new Set<string>();
     targetFeatures.forEach(f => {
       const props = f.properties;
       if (!props) return;
+      const desa = getProp(props, 'desa');
+      const kec = getProp(props, 'kecamatan');
+      if (!desa || !kec) return;
 
+      // Cari pemiluData untuk pemilu yang dipilih
       const pKey = Object.keys(props).find(k => k.toLowerCase() === selectedPemilu.toLowerCase()) || selectedPemilu;
       const pemiluData = props[pKey];
-      if (!pemiluData) return;
+      if (!pemiluData) return; // Feature ini tidak punya data untuk pemilu ini — coba feature lain untuk desa yg sama
 
-      // Ambil nama calon dari lookup (compressed) atau dari dict biasa
-      const candidateNames = getCandidateNames(geoData, selectedPemilu, selectedElection);
+      const desaKey = `${desa}__${kec}`;
+      if (seenDesas.has(desaKey)) return; // Sudah diproses dari feature sebelumnya
+      seenDesas.add(desaKey);
 
-      // ── Mode Semua TPS ──
+      // TPS count
       const tpsCount = (pemiluData.suara_per_tps || []).length;
-      let tpsRaw: any = null;
-      if (selectedPemilu.includes('2019')) tpsRaw = getProp(props, 'jumlah_tps_2019') || getProp(props, 'tps_2019');
-      else if (selectedPemilu.includes('2024')) tpsRaw = getProp(props, 'jumlah_tps_2024') || getProp(props, 'tps_2024');
-      if (!tpsRaw && pemiluData) tpsRaw = pemiluData.jumlah_tps || pemiluData.JUMLAH_TPS;
-      if (!tpsRaw) tpsRaw = getProp(props, 'jumlah_tps');
-
+      const tpsRaw = pemiluData.jumlah_tps || pemiluData.JUMLAH_TPS || getProp(props, 'jumlah_tps');
       const tps = tpsCount > 0 ? tpsCount : parseInt(tpsRaw || '0', 10);
       if (!isNaN(tps)) result.total_tps += tps;
 
-      // Decode election data (format lama atau compressed)
+      // Aggregate suara dari summary (bukan dari per-TPS, karena ini lintas banyak desa)
       const electionRaw = pemiluData[selectedElection] || pemiluData[selectedElection.toUpperCase()];
       const elecDecoded = decodeElectionData(electionRaw, candidateNames);
       if (elecDecoded) {
@@ -662,11 +714,8 @@ export default function Dashboard() {
     });
 
     const sortedCalon = Object.entries(result.calon).sort((a, b) => b[1] - a[1]);
-
     let regionName = 'Pilih Wilayah';
-    if (highlightedDesa && selectedTPS !== null) regionName = `TPS ${selectedTPS} — ${highlightedDesa}`;
-    else if (highlightedDesa) regionName = `Desa ${highlightedDesa}, Kec. ${selectedKec}`;
-    else if (selectedKec === 'ALL') regionName = 'Kabupaten Wonogiri (Seluruh Desa)';
+    if (selectedKec === 'ALL') regionName = 'Kabupaten Wonogiri (Seluruh Desa)';
     else if (selectedKec) regionName = `Kecamatan ${selectedKec}`;
 
     return { ...result, sortedCalon, regionName };
