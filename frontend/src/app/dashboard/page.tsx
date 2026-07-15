@@ -236,8 +236,23 @@ export default function Dashboard() {
         (json.features || []).forEach((feat: any) => {
           const d = (feat.properties?.desa || '').toUpperCase().trim();
           const k = (feat.properties?.kecamatan || '').toUpperCase().trim();
-          if (d && k && feat.properties?.suara_per_tps) {
-            tpsLookup[`${d}__${k}`] = feat.properties.suara_per_tps;
+          if (d && k) {
+            // Cari actual key (misal pemilu_2024 atau PEMILU_2024)
+            let actualKey = pemiluKey;
+            if (feat.properties) {
+              for (const key of Object.keys(feat.properties)) {
+                if (key.toLowerCase() === pemiluKey.toLowerCase()) {
+                  actualKey = key;
+                  break;
+                }
+              }
+            }
+            
+            // Cek di dalam object pemilu (format baru) ATAU di root properties (format lama)
+            const tpsData = feat.properties?.[actualKey]?.suara_per_tps || feat.properties?.suara_per_tps;
+            if (tpsData) {
+              tpsLookup[`${d}__${k}`] = tpsData;
+            }
           }
         });
 
