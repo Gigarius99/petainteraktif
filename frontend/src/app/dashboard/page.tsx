@@ -697,39 +697,69 @@ export default function Dashboard() {
     }
     if (targetFeatures.length === 0) return null;
 
-    // Track desa yang sudah diproses — HANYA proses 1 feature per desa+kec
-    const seenDesas = new Set<string>();
+    // Build desa → best feature lookup:
+    // Prioritaskan feature yang punya data pemilu (pemiluData) dan suara_per_tps
+    const desaBestFeature: Record<string, any> = {};
     targetFeatures.forEach(f => {
       const props = f.properties;
       if (!props) return;
       const desa = getProp(props, 'desa');
       const kec = getProp(props, 'kecamatan');
       if (!desa || !kec) return;
+      const desaKey = `${desa}__${kec}`;
 
-      // Cari pemiluData untuk pemilu yang dipilih
       const pKey = Object.keys(props).find(k => k.toLowerCase() === selectedPemilu.toLowerCase()) || selectedPemilu;
       const pemiluData = props[pKey];
-      if (!pemiluData) return; // Feature ini tidak punya data untuk pemilu ini — coba feature lain untuk desa yg sama
+      if (!pemiluData) return; // fitur ini tidak punya data pemilu, skip
 
-      const desaKey = `${desa}__${kec}`;
-      if (seenDesas.has(desaKey)) return; // Sudah diproses dari feature sebelumnya
-      seenDesas.add(desaKey);
+      const existing = desaBestFeature[desaKey];
+      if (!existing) {
+        desaBestFeature[desaKey] = f;
+      } else {
+        // Prefer feature yang punya suara_per_tps (lebih lengkap)
+        const existingKey = Object.keys(existing.properties).find(k => k.toLowerCase() === selectedPemilu.toLowerCase()) || selectedPemilu;
+        const existingPD = existing.properties[existingKey];
+        const hasTps = (pemiluData.suara_per_tps || []).length > 0;
+        const existingHasTps = (existingPD?.suara_per_tps || []).length > 0;
+        if (hasTps && !existingHasTps) desaBestFeature[desaKey] = f;
+      }
+    });
+
+    Object.values(desaBestFeature).forEach(f => {
+      const props = f.properties;
+      const desa = getProp(props, 'desa');
+      const kec = getProp(props, 'kecamatan');
+      const pKey = Object.keys(props).find(k => k.toLowerCase() === selectedPemilu.toLowerCase()) || selectedPemilu;
+      const pemiluData = props[pKey];
+      if (!pemiluData) return;
 
       // TPS count
-      const tpsCount = (pemiluData.suara_per_tps || []).length;
+      const tpsList: any[] = pemiluData.suara_per_tps || [];
       const tpsRaw = pemiluData.jumlah_tps || pemiluData.JUMLAH_TPS || getProp(props, 'jumlah_tps');
-      const tps = tpsCount > 0 ? tpsCount : parseInt(tpsRaw || '0', 10);
+      const tps = tpsList.length > 0 ? tpsList.length : parseInt(tpsRaw || '0', 10);
       if (!isNaN(tps)) result.total_tps += tps;
 
-      // Aggregate suara dari summary (bukan dari per-TPS, karena ini lintas banyak desa)
+      // Prioritas 1: Aggregate suara dari summary per-desa (cepat)
       const electionRaw = pemiluData[selectedElection] || pemiluData[selectedElection.toUpperCase()];
       const elecDecoded = decodeElectionData(electionRaw, candidateNames);
-      if (elecDecoded) {
+      if (elecDecoded && elecDecoded.total_suara_sah > 0) {
         result.total_suara_sah += elecDecoded.total_suara_sah;
         Object.entries(elecDecoded.calon).forEach(([nama, suara]) => {
           if (!result.calon[nama]) result.calon[nama] = 0;
           result.calon[nama] += suara;
         });
+      } else if (tpsList.length > 0) {
+        // Fallback: aggregate langsung dari suara_per_tps jika summary tidak ada/0
+        for (const entry of tpsList) {
+          const decoded = decodeTpsEntry(entry, selectedElection, candidateNames);
+          if (decoded) {
+            result.total_suara_sah += decoded.total_suara_sah;
+            Object.entries(decoded.calon).forEach(([nama, suara]) => {
+              if (!result.calon[nama]) result.calon[nama] = 0;
+              result.calon[nama] += suara as number;
+            });
+          }
+        }
       }
     });
 
