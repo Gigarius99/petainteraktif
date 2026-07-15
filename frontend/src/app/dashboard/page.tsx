@@ -27,6 +27,11 @@ const ELECTION_ORDER = ['PPWP', 'DPD', 'DPR RI', 'DPRD PROVINSI', 'DPRD KABUPATE
 function getCandidateNames(geoData: any, pemiluKey: string, election: string): string[] {
   // 1. Cek root-level candidate_names
   if (geoData?.candidate_names) {
+    // a. Format flat: candidate_names["PPWP"]
+    if (Array.isArray(geoData.candidate_names[election])) {
+      return geoData.candidate_names[election];
+    }
+    // b. Format nested: candidate_names["pemilu_2024"]["PPWP"]
     const key = Object.keys(geoData.candidate_names).find(k => k.toLowerCase() === pemiluKey.toLowerCase());
     if (key && geoData.candidate_names[key]?.[election]) {
       return geoData.candidate_names[key][election];
