@@ -1466,7 +1466,7 @@ export default function Dashboard() {
                     {tpsListData.length === 0 ? (
                       /* File tidak mengandung data per-TPS */
                       <p className="text-[11px] text-amber-600 bg-amber-50 border border-amber-200 rounded px-2 py-1.5">
-                        ⚠ Data per-TPS tidak tersedia. Gunakan file <span className="font-bold">Compressed</span> dari folder <code className="font-mono bg-amber-100 px-0.5 rounded">+ Suara Per TPS/Compressed/</code>
+                        ⚠ Data per-TPS tidak tersedia. Pastikan Anda telah mengunggah file <span className="font-bold">Suara per TPS (Compressed)</span>.
                       </p>
                     ) : (
                       <div className="flex flex-wrap gap-1 max-h-[96px] overflow-y-auto pr-0.5">
